@@ -26,7 +26,6 @@ export const queryKeys = {
   },
   libraries: {
     all: ["libraries"] as const,
-    apiKeys: ["libraries", "apiKeys"] as const,
   },
   pending: {
     all: ["pending"] as const,

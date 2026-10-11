@@ -89,22 +89,4 @@ export const libraries: Messages["libraries"] = {
     noOutput: "视频旁边",
     automationOff: "手动",
   },
-  access: {
-    title: "下载器接入",
-    description: "下载器使用 API Key 调用 MDCz。API Key 只能访问自动化接口，不能登录网页界面。",
-    keyName: "名称",
-    keyNamePlaceholder: "qBittorrent",
-    create: "创建 Key",
-    created: "请立即复制这个 Key，它不会再次显示。",
-    copy: "复制",
-    copied: "已复制",
-    revoke: "吊销",
-    lastUsed: (value: string | null) => (value ? `最近使用 ${value}` : "从未使用"),
-    noKeys: "还没有 API Key。",
-    qbittorrentTitle: "qBittorrent",
-    qbittorrentHint: "粘贴到 选项 → 下载 →「Torrent 完成时运行外部程序」。%F 为完成的文件或文件夹。",
-    clouddriveTitle: "CloudDrive2",
-    clouddriveHint:
-      "在 CloudDrive2 的文件系统监控中，向此地址发送 POST，并带上请求头 Authorization: Bearer <API Key>。",
-  },
 };

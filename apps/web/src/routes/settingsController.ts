@@ -58,6 +58,17 @@ export const createSettingsServices = (queryClient: QueryClient): SettingsServic
       entries: result.entries.map((entry) => ({ label: entry.label, path: entry.path })),
     };
   },
+  integrations: {
+    origin: window.location.origin,
+    listApiKeys: async () => (await api.apiKeys.list()).keys,
+    createApiKey: async (name) => (await api.apiKeys.create({ name })).secret,
+    revokeApiKey: async (id) => {
+      await api.apiKeys.delete({ id });
+    },
+    testNotification: async (settings) => {
+      await api.notifications.test(settings);
+    },
+  },
   isServer: true,
   settingsTarget: "server",
   subscribeInFlightSaves: useSettingsSavingStore.subscribe,

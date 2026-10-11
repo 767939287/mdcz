@@ -1,6 +1,7 @@
 import type { Configuration } from "@mdcz/shared/config";
 import type { Website } from "@mdcz/shared/enums";
 import type {
+  ApiKeyDto,
   NetworkCheckCookiesResponse,
   SiteConnectivityProbeResponse,
   TranslateTestInputDto,
@@ -47,9 +48,22 @@ export interface SettingsWatermarkDirectoryOpenResult {
 
 export type SettingsTranslateTestInput = TranslateTestInputDto;
 
+/** Server only: API keys that downloaders and cloud drives use to reach the automation endpoints. */
+export interface SettingsIntegrationServices {
+  /** The origin downloaders reach this server at, as the browser sees it. */
+  origin: string;
+  listApiKeys: () => Promise<ApiKeyDto[]>;
+  /** Returns the new key's secret, shown once. */
+  createApiKey: (name: string) => Promise<string>;
+  revokeApiKey: (id: string) => Promise<void>;
+  /** Sends a message through each enabled channel using the settings as edited, saved or not. */
+  testNotification: (settings: Configuration["notifications"]) => Promise<void>;
+}
+
 export interface SettingsServices {
   browsePath: (kind: "file" | "directory", filters?: SettingsBrowseFilter[]) => Promise<SettingsBrowseResult>;
   getPathSuggestions?: (kind: "file" | "directory") => SettingsPathSuggestion[];
+  integrations?: SettingsIntegrationServices;
   isServer?: boolean;
   settingsTarget?: "desktop" | "server";
   suggestDirectoryPath?: (path: string) => Promise<PathAutocompleteResult>;

@@ -3,7 +3,7 @@ export const shell = {
     overview: "Overview",
     workbench: "Workbench",
     tools: "Tools",
-    library: "Library",
+    library: "Movies",
     libraries: "Libraries",
     pending: "Pending",
     settings: "Settings",

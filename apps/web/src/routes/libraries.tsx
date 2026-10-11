@@ -1,8 +1,8 @@
 import { toErrorMessage } from "@mdcz/shared/error";
 import { prepareMaintenanceSetup } from "@mdcz/views/adapters";
 import { useT } from "@mdcz/views/i18n";
-import { AutomationAccessPanel, LibrariesView } from "@mdcz/views/libraries";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { LibrariesView } from "@mdcz/views/libraries";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { api } from "../client";
@@ -13,7 +13,6 @@ export function LibrariesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const librariesQ = useQuery({ queryKey: queryKeys.libraries.all, queryFn: () => api.libraries.list(), retry: false });
-  const keysQ = useQuery({ queryKey: queryKeys.libraries.apiKeys, queryFn: () => api.apiKeys.list(), retry: false });
   const libraries = librariesQ.data?.libraries ?? [];
   const summaryQs = useQueries({
     queries: libraries.map((library) => ({
@@ -27,11 +26,6 @@ export function LibrariesPage() {
   for (const item of pendingQ.data?.items ?? [])
     if (item.libraryId) pendingCounts[item.libraryId] = (pendingCounts[item.libraryId] ?? 0) + 1;
   const refresh = async () => await queryClient.invalidateQueries({ queryKey: queryKeys.libraries.all });
-  const revokeM = useMutation({
-    mutationFn: async (id: string) => await api.apiKeys.delete({ id }),
-    onSuccess: async () => await queryClient.invalidateQueries({ queryKey: queryKeys.libraries.apiKeys }),
-    onError: (error) => toast.error(toErrorMessage(error)),
-  });
 
   return (
     <LibrariesView
@@ -76,20 +70,6 @@ export function LibrariesPage() {
           entries: result.entries.map((entry) => ({ label: entry.label, path: entry.path })),
         };
       }}
-      accessPanel={
-        <AutomationAccessPanel
-          keys={keysQ.data?.keys ?? []}
-          origin={window.location.origin}
-          onCreate={async (name) => {
-            const created = await api.apiKeys.create({ name });
-            await queryClient.invalidateQueries({ queryKey: queryKeys.libraries.apiKeys });
-            return created.secret;
-          }}
-          onRevoke={async (id) => {
-            await revokeM.mutateAsync(id);
-          }}
-        />
-      }
     />
   );
 }

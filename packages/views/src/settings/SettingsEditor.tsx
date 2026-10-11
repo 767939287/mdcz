@@ -1,11 +1,11 @@
 import { Form } from "@mdcz/ui";
-import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef } from "react";
+import { lazy, type ReactNode, Suspense, useMemo, useRef } from "react";
 import type { FieldValues } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { SettingsLayout } from "./SettingsLayout";
 import { SettingsSearchProvider } from "./SettingsSearchContext";
 import { type FieldAnchor, flattenConfig } from "./settingsRegistry";
-import { SettingsEditorAutosaveProvider, valuesEqual } from "./useAutoSaveField";
+import { SettingsEditorAutosaveProvider } from "./useAutoSaveField";
 
 const loadSettingsForm = () => import("./SettingsForm");
 
@@ -63,14 +63,6 @@ export function SettingsEditor({
     defaultValues: flatConfigValues,
     mode: "onChange",
   });
-
-  useEffect(() => {
-    if (valuesEqual(form.getValues(), flatConfigValues)) {
-      return;
-    }
-
-    form.reset(flatConfigValues);
-  }, [flatConfigValues, form]);
 
   return (
     <Form {...form}>

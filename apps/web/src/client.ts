@@ -243,7 +243,7 @@ export const api: ServerApiContract = {
     delete: (input) => trpcMutation("apiKeys.delete", input),
   },
   notifications: {
-    test: () => trpcMutation("notifications.test"),
+    test: (input) => trpcMutation("notifications.test", input),
   },
   mediaRoots: {
     ensurePath: (input) => trpcMutation("mediaRoots.ensurePath", input),

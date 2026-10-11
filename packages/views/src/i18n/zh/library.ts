@@ -49,6 +49,7 @@ export const library: Messages["library"] = {
   checkingAvailability: "正在检查可用性",
   noConfirmedEntries: (unknownCount: number) => `暂无已确认条目，另有 ${unknownCount} 条尚未检查`,
   noMatchingEntries: "暂无匹配条目",
+  nothingIndexed: "还没有收录影片。刮削或导入的影片会显示在这里。",
   loadMore: "加载更多",
 
   // Entry card

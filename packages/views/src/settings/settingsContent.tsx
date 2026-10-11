@@ -1,10 +1,13 @@
 import {
+  type Configuration,
   NFO_FIELD_OPTIONS,
   NOTIFICATION_CHANNELS,
+  notificationsSchema,
   OFFICIAL_SITE_URLS,
   TRANSLATION_FIELD_OPTIONS,
 } from "@mdcz/shared/config";
 import { TRANSLATION_TARGET_OPTIONS, Website } from "@mdcz/shared/enums";
+import { toErrorMessage } from "@mdcz/shared/error";
 import {
   POSTER_TAG_BADGE_ASPECT_HEIGHT,
   POSTER_TAG_BADGE_ASPECT_WIDTH,
@@ -51,7 +54,12 @@ import { useT } from "../i18n";
 import { AggregationPriorityEditorField } from "./AggregationPriorityEditorField";
 import { useOptionalSettingsSearch } from "./SettingsSearchContext";
 import { useSettingsSectionMode } from "./SettingsSectionModeContext";
-import { useSettingsInFlightSaves, useSettingsNotifier, useSettingsServices } from "./SettingsServices";
+import {
+  type SettingsIntegrationServices,
+  useSettingsInFlightSaves,
+  useSettingsNotifier,
+  useSettingsServices,
+} from "./SettingsServices";
 import { SiteConnectivityPill } from "./SiteConnectivityPill";
 import { useHasRenderableFields } from "./sectionVisibility";
 import { AGGREGATION_PRIORITY_KEYS, isRecord } from "./settingsRegistry";
@@ -777,12 +785,31 @@ export function UiSection({ initialUseCustomTitleBar }: UiSectionProps) {
   );
 }
 
-/** Downloader paths and notification channels; the server is the only host that receives callbacks. */
-export function AutomationSection() {
+export function NotificationsSection() {
   const t = useT();
+  const services = useSettingsServices();
+  const notifier = useSettingsNotifier();
+  const form = useFormContext<FieldValues>();
+  const [testing, setTesting] = useState(false);
+
+  const integrations = services.integrations;
+  const handleTestNotification = async ({ testNotification }: SettingsIntegrationServices) => {
+    const settings = Object.fromEntries(
+      Object.keys(notificationsSchema.shape).map((key) => [key, form.getValues(`notifications.${key}`)]),
+    ) as Configuration["notifications"];
+    setTesting(true);
+    try {
+      await testNotification(settings);
+      notifier.success(t.settings.integrations.testSent);
+    } catch (error) {
+      notifier.error(t.settings.testFailed(toErrorMessage(error)));
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <>
-      <PathMappingsField />
       <UrlField name="notifications.webhookUrl" />
       <SecretField name="notifications.webhookSecret" />
       <ChipArrayFieldWrapper
@@ -794,13 +821,33 @@ export function AutomationSection() {
       <UrlField name="notifications.barkUrl" placeholder="https://api.day.app/..." />
       <UrlField name="notifications.ntfyUrl" placeholder="https://ntfy.sh/..." />
       <SecretField name="notifications.ntfyToken" />
+      {integrations ? (
+        <div className="flex justify-end py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={testing}
+            onClick={() => void handleTestNotification(integrations)}
+          >
+            {testing ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" /> {t.settings.integrations.sendingTest}
+              </>
+            ) : (
+              t.settings.integrations.sendTest
+            )}
+          </Button>
+        </div>
+      ) : null}
       <BoolField name="notifications.dailyDigest" />
       <NumberField name="notifications.digestHour" min={0} max={23} />
     </>
   );
 }
 
-function PathMappingsField() {
+export function PathMappingsField() {
   const t = useT();
   return (
     <BaseField name="automation.pathMappings" layout="vertical" commitMode="debounce">

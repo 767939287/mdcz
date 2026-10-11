@@ -160,15 +160,18 @@ export class AutomationService {
     this.#pendingSinceLastMessage += count;
   }
 
-  async testNotification(): Promise<void> {
-    const configuration = await this.deps.config.get();
-    if (!configuration.notifications.channels.length) throw new Error("No notification channel is enabled");
-    await Promise.all(
-      configuration.notifications.channels.map(
-        async (channel) =>
-          await this.sendToChannel(configuration, channel, { title: "MDCz", body: "Test notification" }),
+  /** Tests the settings as edited, which may not have been saved yet. */
+  async testNotification(settings: Configuration["notifications"]): Promise<void> {
+    if (!settings.channels.length) throw new Error("No notification channel is enabled");
+    const results = await Promise.allSettled(
+      settings.channels.map(
+        async (channel) => await this.sendToChannel(settings, channel, { title: "MDCz", body: "Test notification" }),
       ),
     );
+    const failures = results.flatMap((result, index) =>
+      result.status === "rejected" ? [`${settings.channels[index]}: ${toErrorMessage(result.reason)}`] : [],
+    );
+    if (failures.length) throw new Error(failures.join("; "));
   }
 
   toWebhookEvent(task: TaskLifecycleEvent): AutomationWebhookEventDto {
@@ -203,7 +206,7 @@ export class AutomationService {
         .join("; "),
     };
     for (const channel of configuration.notifications.channels)
-      this.enqueue(async () => await this.sendToChannel(configuration, channel, message));
+      this.enqueue(async () => await this.sendToChannel(configuration.notifications, channel, message));
   }
 
   private enqueueWebhook(configuration: Configuration, task: TaskLifecycleEvent, terminal: boolean): void {
@@ -247,15 +250,15 @@ export class AutomationService {
     const added = repositories.library.countCreatedSince(new Date(now.getTime() - 24 * 60 * 60 * 1000));
     const pending = repositories.pending.count();
     const message = { title: "MDCz daily digest", body: `${added} new movies in the last day; ${pending} pending` };
-    for (const channel of channels) this.enqueue(async () => await this.sendToChannel(configuration, channel, message));
+    for (const channel of channels)
+      this.enqueue(async () => await this.sendToChannel(configuration.notifications, channel, message));
   }
 
   private async sendToChannel(
-    configuration: Configuration,
+    settings: Configuration["notifications"],
     channel: Configuration["notifications"]["channels"][number],
     message: Message,
   ): Promise<void> {
-    const settings = configuration.notifications;
     try {
       if (channel === "telegram") {
         if (!settings.telegramBotToken || !settings.telegramChatId) throw new Error("Telegram is not configured");

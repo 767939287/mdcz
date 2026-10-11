@@ -304,7 +304,7 @@ const automationSchema = z.object({
 
 export const NOTIFICATION_CHANNELS = ["telegram", "bark", "ntfy"] as const;
 
-const notificationsSchema = z.object({
+export const notificationsSchema = z.object({
   /** Receives every task start and finish as JSON. */
   webhookUrl: z
     .url({ protocol: /^https?$/u })

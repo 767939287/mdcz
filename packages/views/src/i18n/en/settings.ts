@@ -164,6 +164,32 @@ export const settings = {
     add: "Add mapping",
     remove: "Remove mapping",
   },
+  integrations: {
+    access: "Downloader access",
+    accessDescription:
+      "Downloaders and cloud drives call MDCz with an API key. Keys work only for the automation endpoints, never for the web UI.",
+    notifications: "Notifications",
+    keyName: "Key name",
+    keyNamePlaceholder: "qBittorrent",
+    create: "Create key",
+    created: "Copy this key now; it will not be shown again.",
+    copy: "Copy",
+    copied: "Copied",
+    revoke: "Revoke",
+    lastUsed: (value: string | null) => (value ? `Last used ${value}` : "Never used"),
+    noKeys: "No API keys yet.",
+    qbittorrentTitle: "qBittorrent",
+    qbittorrentHint:
+      'Paste into Options → Downloads → "Run external program on torrent finished". %F is the finished file or folder.',
+    clouddriveTitle: "CloudDrive2",
+    clouddriveHint:
+      "In CloudDrive2's file system watcher, POST to this URL with the header Authorization: Bearer <API key>.",
+    addressHint:
+      "These use the address this browser sees. If the downloader runs in another container, replace it with an address that container can reach.",
+    sendTest: "Send test message",
+    sendingTest: "Sending…",
+    testSent: "Test message sent to every enabled channel",
+  },
   testFailed: (error: string) => `Test failed: ${error}`,
   verifying: "Verifying…",
   verifyTranslation: "Verify metadata translation",

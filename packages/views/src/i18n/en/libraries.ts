@@ -105,24 +105,4 @@ export const libraries = {
     noOutput: "Next to the videos",
     automationOff: "Manual",
   },
-  access: {
-    title: "Downloader access",
-    description:
-      "Downloaders call MDCz with an API key. Keys work only for the automation endpoints, never for the web UI.",
-    keyName: "Key name",
-    keyNamePlaceholder: "qBittorrent",
-    create: "Create key",
-    created: "Copy this key now; it will not be shown again.",
-    copy: "Copy",
-    copied: "Copied",
-    revoke: "Revoke",
-    lastUsed: (value: string | null) => (value ? `Last used ${value}` : "Never used"),
-    noKeys: "No API keys yet.",
-    qbittorrentTitle: "qBittorrent",
-    qbittorrentHint:
-      'Paste into Options → Downloads → "Run external program on torrent finished". %F is the finished file or folder.',
-    clouddriveTitle: "CloudDrive2",
-    clouddriveHint:
-      "In CloudDrive2's file system watcher, POST to this URL with the header Authorization: Bearer <API key>.",
-  },
 };

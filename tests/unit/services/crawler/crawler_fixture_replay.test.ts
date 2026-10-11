@@ -14,9 +14,7 @@ import { validateManualScrapeUrl } from "@mdcz/shared/manualScrapeUrl";
 import { describe, expect, it } from "vitest";
 
 const fixturesRoot = path.resolve(process.cwd(), "tests/fixtures/network");
-const hasNetworkFixtures =
-  existsSync(fixturesRoot) &&
-  existsSync(path.join(fixturesRoot, "snos-301", "manifest.json"));
+const hasNetworkFixtures = existsSync(fixturesRoot) && existsSync(path.join(fixturesRoot, "snos-301", "manifest.json"));
 
 const replayClient = (network?: NetworkClientOptions) =>
   new NetworkFixtureClient({

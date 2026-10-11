@@ -63,6 +63,7 @@ import type {
   NfoReadResponse,
   NfoWriteInput,
   NfoWriteResponse,
+  NotificationTestInputDto,
   OverviewSummaryResponse,
   PersistenceStatusDto,
   PosterCropSaveInput,
@@ -200,7 +201,7 @@ export interface ServerApiContract {
     delete(input: { id: string }): Promise<{ success: true }>;
   };
   notifications: {
-    test(): Promise<{ success: true }>;
+    test(input: NotificationTestInputDto): Promise<{ success: true }>;
   };
   mediaRoots: {
     ensurePath(input: MediaRootEnsurePathInput): Promise<MediaRootEnsurePathResponse>;

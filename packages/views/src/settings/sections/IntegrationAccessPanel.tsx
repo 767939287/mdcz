@@ -1,43 +1,41 @@
+import { toErrorMessage } from "@mdcz/shared/error";
 import type { ApiKeyDto } from "@mdcz/shared/serverDtos";
-import { Button, cn, Input, quietPanelSurfaceClass } from "@mdcz/ui";
-import { Copy, KeyRound, Loader2, Trash2 } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { useT } from "../i18n";
+import { Button, Input } from "@mdcz/ui";
+import { Copy, Loader2, Trash2 } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { useT } from "../../i18n";
+import { type SettingsIntegrationServices, useSettingsNotifier } from "../SettingsServices";
 
-export interface AutomationAccessPanelProps {
-  keys: ApiKeyDto[];
-  /** The origin downloaders reach this server at, as the browser sees it. */
-  origin: string;
-  onCreate: (name: string) => Promise<string>;
-  onRevoke: (id: string) => Promise<void>;
-}
-
-const copy = async (value: string) => await navigator.clipboard.writeText(value);
-
-export function AutomationAccessPanel({ keys, origin, onCreate, onRevoke }: AutomationAccessPanelProps) {
+export function IntegrationAccessPanel({ integrations }: { integrations: SettingsIntegrationServices }) {
   const t = useT();
+  const notifier = useSettingsNotifier();
+  const [keys, setKeys] = useState<ApiKeyDto[]>([]);
   const [name, setName] = useState("qBittorrent");
   const [secret, setSecret] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const shownKey = secret ?? "<API key>";
   // A query parameter survives Windows backslashes and spaces in %F, which JSON quoting would not.
-  const qbittorrentCommand = `curl -fsS -X POST -G -H "Authorization: Bearer ${shownKey}" --data-urlencode "path=%F" ${origin}/api/automation/scrape/start`;
+  const qbittorrentCommand = `curl -fsS -X POST -G -H "Authorization: Bearer ${shownKey}" --data-urlencode "path=%F" ${integrations.origin}/api/automation/scrape/start`;
+  const run = async (action: () => Promise<void>) => {
+    try {
+      await action();
+      setKeys(await integrations.listApiKeys());
+    } catch (error) {
+      notifier.error(toErrorMessage(error));
+    }
+  };
+
+  useEffect(() => {
+    integrations.listApiKeys().then(setKeys, (error: unknown) => notifier.error(toErrorMessage(error)));
+  }, [integrations, notifier]);
 
   return (
-    <section className={cn(quietPanelSurfaceClass, "space-y-5 rounded-quiet-xl p-5")}>
-      <div className="space-y-1">
-        <h2 className="flex items-center gap-2 text-base font-bold tracking-tight">
-          <KeyRound className="h-4 w-4" />
-          {t.libraries.access.title}
-        </h2>
-        <p className="text-sm text-muted-foreground">{t.libraries.access.description}</p>
-      </div>
-
+    <div className="space-y-5 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          aria-label={t.libraries.access.keyName}
+          aria-label={t.settings.integrations.keyName}
           className="max-w-xs"
-          placeholder={t.libraries.access.keyNamePlaceholder}
+          placeholder={t.settings.integrations.keyNamePlaceholder}
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
@@ -45,28 +43,25 @@ export function AutomationAccessPanel({ keys, origin, onCreate, onRevoke }: Auto
           disabled={creating || !name.trim()}
           onClick={async () => {
             setCreating(true);
-            try {
-              setSecret(await onCreate(name.trim()));
-            } finally {
-              setCreating(false);
-            }
+            await run(async () => setSecret(await integrations.createApiKey(name.trim())));
+            setCreating(false);
           }}
         >
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {t.libraries.access.create}
+          {t.settings.integrations.create}
         </Button>
       </div>
 
       {secret ? (
         <div className="space-y-1 rounded-quiet border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
-          <div className="font-medium">{t.libraries.access.created}</div>
+          <div className="font-medium">{t.settings.integrations.created}</div>
           <CopyLine value={secret} />
         </div>
       ) : null}
 
       <ul className="divide-y divide-border/60 rounded-quiet border border-border/60">
         {keys.length === 0 ? (
-          <li className="px-3 py-2 text-xs text-muted-foreground">{t.libraries.access.noKeys}</li>
+          <li className="px-3 py-2 text-xs text-muted-foreground">{t.settings.integrations.noKeys}</li>
         ) : null}
         {keys.map((key) => (
           <li key={key.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
@@ -74,24 +69,29 @@ export function AutomationAccessPanel({ keys, origin, onCreate, onRevoke }: Auto
               <div className="font-medium">{key.name}</div>
               <div className="font-mono text-xs text-muted-foreground">
                 {key.prefix}… ·{" "}
-                {t.libraries.access.lastUsed(key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : null)}
+                {t.settings.integrations.lastUsed(key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : null)}
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => void onRevoke(key.id)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void run(async () => await integrations.revokeApiKey(key.id))}
+            >
               <Trash2 className="h-3.5 w-3.5" />
-              {t.libraries.access.revoke}
+              {t.settings.integrations.revoke}
             </Button>
           </li>
         ))}
       </ul>
 
-      <Snippet title={t.libraries.access.qbittorrentTitle} hint={t.libraries.access.qbittorrentHint}>
+      <p className="text-xs text-muted-foreground">{t.settings.integrations.addressHint}</p>
+      <Snippet title={t.settings.integrations.qbittorrentTitle} hint={t.settings.integrations.qbittorrentHint}>
         <CopyLine value={qbittorrentCommand} />
       </Snippet>
-      <Snippet title={t.libraries.access.clouddriveTitle} hint={t.libraries.access.clouddriveHint}>
-        <CopyLine value={`${origin}/api/webhooks/clouddrive`} />
+      <Snippet title={t.settings.integrations.clouddriveTitle} hint={t.settings.integrations.clouddriveHint}>
+        <CopyLine value={`${integrations.origin}/api/webhooks/clouddrive`} />
       </Snippet>
-    </section>
+    </div>
   );
 }
 
@@ -117,13 +117,13 @@ function CopyLine({ value }: { value: string }) {
         variant="outline"
         size="sm"
         onClick={async () => {
-          await copy(value);
+          await navigator.clipboard.writeText(value);
           setCopied(true);
           window.setTimeout(() => setCopied(false), 1500);
         }}
       >
         <Copy className="h-3.5 w-3.5" />
-        {copied ? t.libraries.access.copied : t.libraries.access.copy}
+        {copied ? t.settings.integrations.copied : t.settings.integrations.copy}
       </Button>
     </div>
   );

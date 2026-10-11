@@ -6,18 +6,20 @@ import { SettingsSectionModeProvider } from "./SettingsSectionModeContext";
 import { useSettingsServices } from "./SettingsServices";
 import { SitePriorityEditorField } from "./SitePriorityEditorField";
 import { Subsection } from "./Subsection";
+import { IntegrationAccessPanel } from "./sections/IntegrationAccessPanel";
 import { MediaServerSection } from "./sections/MediaServerSections";
 import {
   AggregationBehaviorSection,
   AggregationPrioritySection,
   AggregationScrapeSection,
   AssetDownloadsSection,
-  AutomationSection,
   FilenameFilteringSection,
   NamingSection,
   NetworkConnectionSection,
   NetworkSiteAccessSection,
   NfoSection,
+  NotificationsSection,
+  PathMappingsField,
   PathsSection,
   ScrapePacingSection,
   ShortcutsSection,
@@ -156,10 +158,11 @@ export function MediaServerTopLevelSection({ forceOpen = false }: { forceOpen?: 
   );
 }
 
-/** Downloader path mappings and notifications; only the server receives callbacks and sends messages. */
+/** Downloader access and notifications; only the server receives callbacks and sends messages. */
 export function AutomationTopLevelSection({ forceOpen = false }: { forceOpen?: boolean }) {
   const t = useT();
   const services = useSettingsServices();
+  const search = useSettingsSearch();
   if ((services.settingsTarget ?? (services.isServer ? "server" : "desktop")) !== "server") return null;
 
   return (
@@ -169,7 +172,20 @@ export function AutomationTopLevelSection({ forceOpen = false }: { forceOpen?: b
       title={t.settingsFields.sections.automation.label}
       forceOpen={forceOpen}
     >
-      <AutomationSection />
+      <Subsection
+        title={t.settings.integrations.access}
+        description={t.settings.integrations.accessDescription}
+        className="mb-6 last:mb-0"
+      >
+        {/* The key panel holds no settings fields, so a search only ever matches the fields around it. */}
+        {services.integrations && !search.hasActiveFilters ? (
+          <IntegrationAccessPanel integrations={services.integrations} />
+        ) : null}
+        <PathMappingsField />
+      </Subsection>
+      <Subsection title={t.settings.integrations.notifications} className="mb-6 last:mb-0">
+        <NotificationsSection />
+      </Subsection>
     </SectionAnchor>
   );
 }

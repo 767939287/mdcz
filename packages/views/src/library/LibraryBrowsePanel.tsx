@@ -1,7 +1,7 @@
 import { toErrorMessage } from "@mdcz/shared/error";
 import type { LibraryHealthIssue, LibrarySummaryResponse } from "@mdcz/shared/serverDtos";
 import { Button, cn, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@mdcz/ui";
-import { LayoutGrid, List, LoaderCircle, Wrench, X } from "lucide-react";
+import { ChevronDown, LayoutGrid, List, LoaderCircle, Wrench, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useT } from "../i18n";
@@ -34,7 +34,11 @@ export function LibraryBrowsePanel({ browse, matchCount }: { browse: LibraryBrow
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [fixing, setFixing] = useState(false);
   const { summary, health, facet } = browse;
-  const issues = summary ? (Object.keys(t.library.health.issues) as LibraryHealthIssue[]) : [];
+  const shownIssues = summary
+    ? (Object.keys(t.library.health.issues) as LibraryHealthIssue[]).filter(
+        (issue) => (summary.issues[issue] ?? 0) > 0 || health === issue,
+      )
+    : [];
   const fixable = health !== undefined && HEALTH_FIX_PRESETS[health] !== undefined && matchCount > 0;
   const filtered = health !== undefined || facet !== undefined;
 
@@ -81,13 +85,14 @@ export function LibraryBrowsePanel({ browse, matchCount }: { browse: LibraryBrow
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
-          {t.library.health.title}
-        </span>
-        {issues.map((issue) => {
+        {shownIssues.length > 0 ? (
+          <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+            {t.library.health.title}
+          </span>
+        ) : null}
+        {shownIssues.map((issue) => {
           const count = summary?.issues[issue] ?? 0;
           const active = health === issue;
-          if (count === 0 && !active) return null;
           return (
             <Button
               aria-pressed={active}
@@ -105,13 +110,14 @@ export function LibraryBrowsePanel({ browse, matchCount }: { browse: LibraryBrow
         })}
         <Button
           aria-expanded={facetsOpen}
-          className="ml-auto h-7 px-3 text-xs"
+          className="ml-auto h-7 gap-1 px-3 text-xs"
           onClick={() => setFacetsOpen((open) => !open)}
           size="sm"
           type="button"
           variant="ghost"
         >
           {t.library.facets.title}
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", facetsOpen && "rotate-180")} />
         </Button>
         {filtered ? (
           <Button

@@ -47,6 +47,7 @@ export const library = {
   checkingAvailability: "Checking availability…",
   noConfirmedEntries: (unknownCount: number) => `No confirmed entries yet; ${unknownCount} not yet checked`,
   noMatchingEntries: "No matching entries",
+  nothingIndexed: "Nothing indexed yet. Scraped and imported movies appear here.",
   loadMore: "Load more",
 
   // Entry card

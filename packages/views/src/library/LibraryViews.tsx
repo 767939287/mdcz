@@ -252,17 +252,19 @@ export function LibraryIndexView({
             )}
             {filteredEntries.length === 0 && (
               <div className="flex min-h-[300px] flex-col items-center justify-center rounded-quiet-xl border border-dashed border-border/60 bg-surface-low/30 text-center text-muted-foreground">
-                <Database className="mb-4 h-10 w-10 opacity-20" />
+                <Database className="mb-3 h-10 w-10 text-muted-foreground/40" />
                 {isAvailabilityLoading && availabilityFilter !== "all" && unknownCount > 0 ? (
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     {t.library.checkingAvailability}
                   </div>
                 ) : (
-                  <p className="text-sm font-medium">
+                  <p className="text-sm">
                     {availabilityFilter !== "all" && unknownCount > 0
                       ? t.library.noConfirmedEntries(unknownCount)
-                      : t.library.noMatchingEntries}
+                      : total === 0 && !query.trim() && !browse?.health && !browse?.facet
+                        ? t.library.nothingIndexed
+                        : t.library.noMatchingEntries}
                   </p>
                 )}
               </div>

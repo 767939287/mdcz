@@ -381,6 +381,14 @@ export function SettingsEditorAutosaveProvider({
     }
 
     savedValuesRef.current = savedValues;
+    // Each save writes back into the config cache, and refetches return the same values. Only a change the
+    // editor did not commit (profile switch, import, reset) may discard edits still waiting on their debounce.
+    if (
+      Object.entries(savedValues).every(([path, value]) => valuesEqual(value, committedValuesRef.current.get(path)))
+    ) {
+      return;
+    }
+
     committedValuesRef.current = new Map(Object.entries(savedValues));
     pendingProgrammaticValuesRef.current.clear();
     pendingSaveValuesRef.current.clear();
@@ -391,6 +399,7 @@ export function SettingsEditorAutosaveProvider({
       clearFieldTimers(path);
     }
 
+    formRef.current.reset(savedValues);
     setFieldStatuses({});
   }, [clearFieldTimers, savedValues]);
 

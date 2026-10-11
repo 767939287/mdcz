@@ -73,6 +73,7 @@ export const RootLayout = ({ children }: { children: ReactNode }) => {
 
 const AuthenticatedShell = ({ children, pathname }: { children: ReactNode; pathname: string }) => {
   useWebTaskSync();
+  const pendingQ = useQuery({ queryKey: queryKeys.pending.all, queryFn: () => api.pending.list(), retry: false });
   const [hasVisitedTools, setHasVisitedTools] = useState(pathname === "/tools");
   const isToolsRoute = pathname === "/tools";
 
@@ -84,7 +85,7 @@ const AuthenticatedShell = ({ children, pathname }: { children: ReactNode; pathn
 
   return (
     <ThemeProvider>
-      <AppShell currentPath={pathname} linkComponent={ShellLink}>
+      <AppShell currentPath={pathname} linkComponent={ShellLink} navBadges={{ pending: pendingQ.data?.items.length }}>
         {children}
         {hasVisitedTools || isToolsRoute ? (
           <div className="h-full w-full" style={{ display: isToolsRoute ? "block" : "none" }}>

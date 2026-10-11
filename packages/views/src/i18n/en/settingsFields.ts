@@ -24,8 +24,20 @@ const sections: Record<FieldAnchor, SectionText> = {
   download: { label: "Downloads", aliases: ["download", "asset", "poster", "fanart", "nfo"] },
   mediaServer: { label: "Media servers", aliases: ["media server", "jellyfin", "emby", "person", "actor"] },
   automation: {
-    label: "Downloaders & notifications",
-    aliases: ["automation", "downloader", "qbittorrent", "webhook", "telegram", "bark", "ntfy", "notification"],
+    label: "Integrations",
+    aliases: [
+      "integration",
+      "automation",
+      "downloader",
+      "qbittorrent",
+      "clouddrive",
+      "api key",
+      "webhook",
+      "telegram",
+      "bark",
+      "ntfy",
+      "notification",
+    ],
   },
   system: { label: "Interface & shortcuts", aliases: ["system", "ui", "interface", "shortcut", "hotkey"] },
 };

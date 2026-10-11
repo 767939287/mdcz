@@ -1,10 +1,10 @@
 import { toErrorMessage } from "@mdcz/shared/error";
-import { Button, Form, FormControl, FormField, FormItem, FormLabel, FormMessage, PasswordInput } from "@mdcz/ui";
+import { Button, Label, PasswordInput } from "@mdcz/ui";
 import { useT } from "@mdcz/views/i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { TRPCClientError } from "@trpc/client";
+import { type FormEvent, useState } from "react";
 import { api } from "../../client";
 import { queryKeys } from "../../lib/queryKeys";
 import { ErrorBanner } from "../../routeCommon";
@@ -16,21 +16,22 @@ export const LoginPage = ({ nextPath = "/" }: { nextPath?: string }) => {
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  const form = useForm({
-    defaultValues: {
-      password: "",
-    },
-  });
-
-  const handleSubmit = async (values: { password: string }) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    // Read the field itself: browser autofill can fill it without React ever seeing an input event.
+    const password = String(new FormData(event.currentTarget).get("password") ?? "");
     setError(null);
     setIsPending(true);
     try {
-      await api.auth.login({ password: values.password });
+      await api.auth.login({ password });
       await queryClient.invalidateQueries({ queryKey: queryKeys.auth.status });
       await navigate({ to: nextPath, replace: true });
     } catch (err) {
-      setError(toErrorMessage(err));
+      setError(
+        err instanceof TRPCClientError && err.data?.code === "UNAUTHORIZED"
+          ? t.web.incorrectPassword
+          : toErrorMessage(err),
+      );
     } finally {
       setIsPending(false);
     }
@@ -47,31 +48,24 @@ export const LoginPage = ({ nextPath = "/" }: { nextPath?: string }) => {
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
 
-        <Form {...form}>
-          <form className="grid gap-6" onSubmit={(event) => void form.handleSubmit(handleSubmit)(event)}>
-            <FormField
-              control={form.control}
+        <form className="grid gap-6" onSubmit={(event) => void handleSubmit(event)}>
+          {/* Password managers save and fill a credential only as a username/password pair. */}
+          <input type="text" name="username" autoComplete="username" value="admin" readOnly hidden />
+          <div className="grid gap-2">
+            <Label htmlFor="admin-login-password">{t.web.password}</Label>
+            <PasswordInput
+              visibilityLabels={{ show: t.common.showPassword, hide: t.common.hidePassword }}
+              id="admin-login-password"
               name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t.web.password}</FormLabel>
-                  <FormControl>
-                    <PasswordInput
-                      visibilityLabels={{ show: t.common.showPassword, hide: t.common.hidePassword }}
-                      autoFocus
-                      placeholder="••••••••"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              autoComplete="current-password"
+              autoFocus
+              placeholder="••••••••"
             />
-            <Button disabled={isPending} type="submit">
-              {isPending ? t.web.loggingIn : t.web.login}
-            </Button>
-          </form>
-        </Form>
+          </div>
+          <Button disabled={isPending} type="submit">
+            {isPending ? t.web.loggingIn : t.web.login}
+          </Button>
+        </form>
       </div>
     </div>
   );

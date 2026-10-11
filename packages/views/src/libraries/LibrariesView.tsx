@@ -16,7 +16,6 @@ export interface LibrariesViewProps {
   errorMessage?: string | null;
   /** Server only: automation levels and discovery need the always-on server. */
   showAutomation: boolean;
-  accessPanel?: ReactNode;
   /** Per library id; absent until the summary arrives. */
   summaries?: Record<string, LibrarySummaryResponse | undefined>;
   pendingCounts?: Record<string, number>;
@@ -37,7 +36,6 @@ export function LibrariesView({
   loading = false,
   errorMessage,
   showAutomation,
-  accessPanel,
   summaries = {},
   pendingCounts = {},
   onCreate,
@@ -172,8 +170,6 @@ export function LibrariesView({
             </article>
           ))}
         </section>
-
-        {accessPanel}
       </div>
       <LibraryEditorDialog
         open={editorOpen}

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BAIDU_SERVICE_OPTIONS, type Configuration, type DeepPartial } from "./config";
+import { BAIDU_SERVICE_OPTIONS, type Configuration, type DeepPartial, type notificationsSchema } from "./config";
 import { directorySourceSchema, directoryTaskScopeSchema } from "./directoryTasks";
 import { TRANSLATION_TARGET_OPTIONS, TranslateEngine, Website } from "./enums";
 import {
@@ -1050,6 +1050,8 @@ export const translateTestInputSchema = z.object({
 });
 
 export type TranslateTestInputDto = z.infer<typeof translateTestInputSchema>;
+
+export type NotificationTestInputDto = z.input<typeof notificationsSchema>;
 
 export const translateTestResponseSchema = z.object({
   status: z.enum(["ok", "missing_model", "missing_credentials", "failed"]),

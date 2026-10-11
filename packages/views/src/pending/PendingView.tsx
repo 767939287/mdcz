@@ -54,6 +54,17 @@ export function PendingView({
   onIgnore,
 }: PendingViewProps) {
   const t = useT();
+  if (!loading && items.length === 0 && !errorMessage) {
+    return (
+      <main className="flex h-full min-h-0 flex-col bg-surface-canvas p-4 text-foreground">
+        <h1 className="px-1 text-lg font-bold tracking-tight">{t.pending.title}</h1>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 pb-16 text-sm text-muted-foreground">
+          <Inbox className="h-10 w-10 text-muted-foreground/40" />
+          {t.pending.empty}
+        </div>
+      </main>
+    );
+  }
   return (
     <main className="grid h-full min-h-0 grid-cols-1 gap-0 bg-surface-canvas text-foreground lg:grid-cols-[22rem_minmax(0,1fr)]">
       <section className="min-h-0 overflow-y-auto border-border/60 p-4 lg:border-r">
@@ -62,12 +73,6 @@ export function PendingView({
           <div className="mb-3 flex items-center gap-2 rounded-quiet border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
             {t.pending.loadFailed(errorMessage)}
-          </div>
-        ) : null}
-        {!loading && items.length === 0 && !errorMessage ? (
-          <div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
-            <Inbox className="h-8 w-8 opacity-30" />
-            {t.pending.empty}
           </div>
         ) : null}
         <ul className="space-y-2">

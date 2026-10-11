@@ -1,4 +1,5 @@
 import { MediaDirectoryUnavailableError, toMediaLibraryDto } from "@mdcz/runtime/library";
+import { notificationsSchema } from "@mdcz/shared/config";
 import {
   mediaLibraryIdInputSchema,
   mediaLibrarySettingsSchema,
@@ -279,8 +280,8 @@ export const appRouter = t.router({
     }),
   }),
   notifications: t.router({
-    test: protectedProcedure.mutation(async ({ ctx }) => {
-      await ctx.services.automation.testNotification();
+    test: protectedProcedure.input(notificationsSchema).mutation(async ({ ctx, input }) => {
+      await ctx.services.automation.testNotification(input);
       return { success: true as const };
     }),
   }),
