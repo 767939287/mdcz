@@ -67,7 +67,7 @@ export const settingsFields: Messages["settingsFields"] = {
     "network.proxyType": { label: "代理类型" },
     "network.proxy": { label: "代理地址" },
     "network.useProxy": { label: "启用代理" },
-    "network.directSites": { label: "不走代理的站点" },
+    "network.directSites": { label: "直连站点（绕过代理）" },
     "network.timeout": { label: "超时时间(秒)" },
     "network.retryCount": { label: "重试次数" },
     "network.javdbUrl": {
@@ -345,12 +345,12 @@ export const settingsFields: Messages["settingsFields"] = {
       description: "同步简介或头像后，额外请求 Emby 刷新人物元数据与图片。",
     },
     "emby.notifyAfterPublish": {
-      label: "发布后扫描所在目录",
-      description: "每部影片发布后，请求 Emby 只扫描该目录，无需手动刷新媒体库即可看到。",
+      label: "入库后增量刷新目录",
+      description: "影片整理入库后，请求 Emby 仅刷新该影片所在目录，无需全局扫描媒体库即可即时显示。",
     },
     "jellyfin.notifyAfterPublish": {
-      label: "发布后扫描所在目录",
-      description: "每部影片发布后，请求 Jellyfin 只扫描该目录，无需手动刷新媒体库即可看到。",
+      label: "入库后增量刷新目录",
+      description: "影片整理入库后，请求 Jellyfin 仅刷新该影片所在目录，无需全局扫描媒体库即可即时显示。",
     },
     "automation.pathMappings": {
       label: "下载器路径映射",
@@ -374,20 +374,23 @@ export const settingsFields: Messages["settingsFields"] = {
     "automation.qbittorrent.category": {
       label: "分类",
       description:
-        "MDCz 只接收该分类中已完成的种子。分类的保存路径需位于某个媒体库的源目录内，且不能在开启了下载器监控的 MoviePilot 下载目录中。",
+        "MDCz 仅处理该分类中下载完成的种子。分类的保存路径必须位于某个媒体库的来源目录内；若同时使用了 MoviePilot 等工具，请避免监控同一分类或路径以防止文件冲突。",
     },
     "notifications.webhookUrl": { label: "Webhook 地址", description: "以 JSON 接收每个任务的开始与结束。" },
     "notifications.webhookSecret": { label: "Webhook 密钥", description: "通过 x-mdcz-webhook-secret 请求头发送。" },
     "notifications.channels": {
-      label: "消息渠道",
-      description: "刮削完成时发送简短消息；开启每日摘要后也通过这些渠道发送。",
+      label: "通知渠道",
+      description: "刮削完成时发送通知消息；开启每日摘要后也通过这些渠道发送。",
     },
     "notifications.telegramBotToken": { label: "Telegram Bot Token" },
     "notifications.telegramChatId": { label: "Telegram Chat ID" },
     "notifications.barkUrl": { label: "Bark 地址", description: "包含设备 Key 的 Bark 推送地址。" },
     "notifications.ntfyUrl": { label: "ntfy 主题地址", description: "例如 https://ntfy.sh/your-topic。" },
     "notifications.ntfyToken": { label: "ntfy 访问令牌", description: "公开主题可留空。" },
-    "notifications.dailyDigest": { label: "每日摘要", description: "每天汇报一次前一天新增的影片数和待处理文件数。" },
+    "notifications.dailyDigest": {
+      label: "每日摘要",
+      description: "每日定时汇总前一天新增入库的影片数与待处理文件数。",
+    },
     "notifications.digestHour": { label: "摘要发送时间（0-23 时）", description: "服务端本地时间。" },
     "shortcuts.startOrStopScrape": { label: "开始/停止刮削", description: "示例: S", aliases: ["快捷键"] },
     "shortcuts.retryScrape": { label: "重新刮削", description: "示例: R" },

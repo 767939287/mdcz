@@ -102,7 +102,7 @@ test("submits directories without scanning and keeps explicit previews cancellab
   triggerStart();
   await expect.poll(() => onStartDirectory.mock.calls.length).toBe(2);
   await expect.element(screen.getByLabelText("扫描目录", { exact: true })).toBeDisabled();
-  await expect.element(screen.getByLabelText("库", { exact: true })).toBeDisabled();
+  await expect.element(screen.getByLabelText("媒体库", { exact: true })).toBeDisabled();
   finishStart();
   await expect.element(start).toBeEnabled();
   expect(onStart).not.toHaveBeenCalled();

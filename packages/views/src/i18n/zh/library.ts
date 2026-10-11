@@ -27,7 +27,7 @@ export const library: Messages["library"] = {
       missingBackdrop: "缺少背景图",
       missingSynopsis: "缺少简介",
       noNfo: "没有 NFO",
-      duplicate: "编号重复",
+      duplicate: "番号重复",
     },
     fix: (count: number) => `从站点刷新 ${count} 部`,
     fixHint: "打开刷新结果的预览，应用之前不会写入任何内容。",

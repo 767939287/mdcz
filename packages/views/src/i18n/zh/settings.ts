@@ -150,7 +150,7 @@ export const settings: Messages["settings"] = {
   },
   integrations: {
     access: "下载器接入",
-    accessDescription: "下载器和网盘使用 API Key 调用 MDCz。API Key 只能访问自动化接口，不能登录网页界面。",
+    accessDescription: "供下载器与网盘调用自动化接口，无法用于登录网页界面。",
     notifications: "通知",
     keyName: "名称",
     keyNamePlaceholder: "qBittorrent",
@@ -170,14 +170,13 @@ export const settings: Messages["settings"] = {
     clouddriveLastEvent: (time) =>
       time ? `最近一次收到 CloudDrive2 事件：${time}` : "MDCz 启动以来尚未收到 CloudDrive2 事件。",
     qbittorrent: "qBittorrent",
-    qbittorrentDescription:
-      "MDCz 每分钟检查一次 qBittorrent，刮削该分类中下载完成的种子，下载器容器内无需运行任何脚本。开始轮询时已完成的种子不会处理。",
+    qbittorrentDescription: "每分钟轮询并刮削分类中新完成的种子（启动前已完成的项目不处理）。",
     qbittorrentOff: "填写地址和分类后开始轮询。",
     qbittorrentError: (error) => `qBittorrent 检查失败：${error}`,
     qbittorrentChecked: (time, library) =>
       library ? `${time} 已检查；完成的种子进入媒体库「${library}」。` : `${time} 已检查。`,
-    qbittorrentNoLibrary: "该分类的保存路径不在任何媒体库的源目录内，其中的种子无法刮削。请添加媒体库或路径映射。",
-    qbittorrentMoveHint: (library) => `媒体库「${library}」会移动文件，种子将停止做种。改为硬链接可继续做种。`,
+    qbittorrentNoLibrary: "保存路径未匹配到任何媒体库的来源目录，请添加媒体库或配置路径映射。",
+    qbittorrentMoveHint: (library) => `媒体库「${library}」采用移动模式，会导致停止做种；建议改为硬链接。`,
     qbittorrentFailures: (count) => `${count} 个种子未能刮削，MDCz 每分钟重试：`,
     addressHint: "以下地址取自当前浏览器。若下载器运行在其他容器中，请换成该容器能访问到的地址。",
     sendTest: "发送测试消息",
@@ -199,7 +198,7 @@ export const settings: Messages["settings"] = {
       },
       official: {
         label: "厂商官网",
-        description: "片商自己的网站，只查询自家番号。标题不带演员名、简介无打码，但简介不分段。",
+        description: "片商官方网站，仅查询自家番号。优势为标题纯净无演员名、简介无马赛克遮挡，但简介通常未分段。",
       },
       avbase: {
         label: "avbase",

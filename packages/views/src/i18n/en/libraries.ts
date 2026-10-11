@@ -3,11 +3,10 @@ import type { AutomationLevel, DiscoveryMode, MediaLibraryIssueCode, PlacementMo
 export const libraries = {
   title: "Libraries",
   description:
-    "A library is a source directory, an output directory with naming templates, and how videos get there. Scrapes publish into a library.",
+    "A library defines where incoming videos arrive, where organized movies go with naming templates, and placement rules. Scrapes publish into a library.",
   add: "Add library",
   createFirst: "Create your first library",
-  createFirstDescription:
-    "Before scraping, tell MDCz where videos come from and where finished movies go. You can add more libraries later.",
+  createFirstDescription: "Set up source and output directories where finished movies are organized.",
   importExisting: "I already have a library",
   importExistingDescription:
     "Point MDCz at a directory that already holds videos and NFOs. It reads what is there; nothing is moved or rewritten.",
@@ -16,16 +15,16 @@ export const libraries = {
   health: {
     title: "Health",
     movies: (count: number) => `${count} movies indexed`,
-    notImported: "Nothing from this library is indexed yet. Import it to see what it needs.",
+    notImported: "This library has not been indexed yet. Import it to check for missing metadata and assets.",
     import: "Import now",
     view: "View",
     pending: (count: number) => `${count} waiting in the pending list`,
-    allGood: "No gaps found.",
+    allGood: "All metadata and assets are complete.",
   },
   edit: "Edit",
   delete: "Delete",
   deleteTitle: (name: string) => `Delete library "${name}"?`,
-  deleteDescription: "Files and NFOs stay where they are; only this library's settings and watch state are removed.",
+  deleteDescription: "Only removes library settings and watch state; files and NFOs stay untouched.",
   saved: "Library saved",
   deleted: "Library deleted",
   loadFailed: (error: string) => `Could not load libraries: ${error}`,
@@ -45,7 +44,7 @@ export const libraries = {
     discovery: "Discovery",
     cloudPath: "CloudDrive2 path",
     cloudPathHint: "This library's root as CloudDrive2 names it, for example /115/Downloads.",
-    scanIntervalMinutes: "Full rescan every (minutes)",
+    scanIntervalMinutes: "Full rescan interval (minutes)",
     scanIntervalHint: "Catches what change events miss, such as network mounts that send none.",
   },
   placements: {
@@ -61,27 +60,31 @@ export const libraries = {
       description: "Keep videos where they are; put a symbolic link next to the metadata in the output directory.",
     },
     strm: {
-      label: ".strm link",
+      label: "STRM stub (.strm)",
       description:
-        "Keep videos where they are, local or on a cloud drive; write a .strm file pointing at each one next to the metadata in the output directory. The media server must see the video at the same path as MDCz.",
+        "Keep videos where they are (local or cloud); write a .strm stub file pointing to each video beside the metadata in the output directory. The media server must access videos at the same path as MDCz.",
     },
     metadataOnly: {
       label: "Metadata only",
       description:
-        "Keep videos where they are and write only NFOs and images to the output directory, as an archive media servers cannot play.",
+        "Keep videos in place and export only NFOs and images to the output directory for archiving (the output directory contains no video files, so media servers cannot play them).",
     },
     inPlace: {
-      label: "In place",
-      description: "Keep videos where they are with their names; write metadata next to them. No output directory.",
+      label: "In-place",
+      description:
+        "Keep videos in place with original names and write metadata alongside them. No output directory needed.",
     },
   } satisfies Record<PlacementMode, { label: string; description: string }>,
   automationLevels: {
     off: { label: "Off", description: "Only scrapes you start." },
     register: {
       label: "Register only",
-      description: "New files appear in the pending list, waiting for you to scrape them.",
+      description: "New files are added to the pending queue for manual review and scraping.",
     },
-    scrape: { label: "Register and scrape", description: "New files are scraped as soon as they finish arriving." },
+    scrape: {
+      label: "Register and scrape",
+      description: "Automatically scrape new files as soon as downloading or transfer finishes.",
+    },
   } satisfies Record<AutomationLevel, { label: string; description: string }>,
   discoveryModes: {
     events: { label: "Local change events", description: "Watch the source directory for file system events." },
@@ -91,18 +94,18 @@ export const libraries = {
     },
   } satisfies Record<DiscoveryMode, { label: string; description: string }>,
   baselineNotice:
-    "When automation is first turned on, files already in the source directory are recorded and not scraped; scrape them from the workbench.",
+    "When automation is first enabled, existing files in the source directory are recorded as a baseline and will not be scraped automatically. Scrape them manually from the workbench.",
   issues: {
     libraryPathNotAbsolute: "Enter an absolute path",
     libraryOutputRequired: "This placement needs an output directory",
-    libraryOutputOverlapsSource: "The output directory cannot be inside the source directory, or contain it",
+    libraryOutputOverlapsSource: "The output directory cannot overlap with or be inside the source directory",
     libraryCloudPathInvalid: "Enter the library root as a CloudDrive2 path starting with /",
     optionalSegmentPathSeparator: "Optional segments [] cannot contain path separators",
   } satisfies Record<MediaLibraryIssueCode, string> as Record<string, string | undefined>,
   card: {
     source: "Source",
     output: "Output",
-    noOutput: "Next to the videos",
+    noOutput: "Alongside videos",
     automationOff: "Manual",
     cloudDriveLastEvent: (time: string | null) =>
       time
@@ -110,5 +113,5 @@ export const libraries = {
         : "No CloudDrive2 event for this library since MDCz started. Check the webhook and the cloud path.",
   },
   stubSourceHint:
-    "This source holds .strm stubs. Choose In place: metadata is written beside each stub and the stubs stay where a STRM helper expects them.",
+    "This source holds .strm stubs. Choose In-place: metadata is written beside each stub and stubs stay where a STRM helper expects them.",
 };

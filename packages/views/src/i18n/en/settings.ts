@@ -166,8 +166,7 @@ export const settings = {
   },
   integrations: {
     access: "Downloader access",
-    accessDescription:
-      "Downloaders and cloud drives call MDCz with an API key. Keys work only for the automation endpoints, never for the web UI.",
+    accessDescription: "Allows downloaders and cloud tools to access automation APIs (cannot log into the web UI).",
     notifications: "Notifications",
     keyName: "Key name",
     keyNamePlaceholder: "qBittorrent",
@@ -188,15 +187,15 @@ export const settings = {
       time ? `Last event from CloudDrive2: ${time}` : "No event from CloudDrive2 since MDCz started.",
     qbittorrent: "qBittorrent",
     qbittorrentDescription:
-      "MDCz checks qBittorrent every minute and scrapes torrents that finished in the category, so nothing has to run inside the downloader's container. Torrents already finished when polling begins are left alone.",
+      "Polls and scrapes completed torrents in this category every minute (torrents finished before polling are skipped).",
     qbittorrentOff: "Polling is off until the URL and category are set.",
     qbittorrentError: (error: string) => `qBittorrent check failed: ${error}`,
     qbittorrentChecked: (time: string, library: string | null) =>
       library ? `Checked ${time}; finished torrents go to library ${library}.` : `Checked ${time}.`,
     qbittorrentNoLibrary:
-      "The category's save path is not inside any library's source directory, so its torrents cannot be scraped. Add a library or a path mapping.",
+      "Category save path is not inside any library's source directory. Add a library or path mapping.",
     qbittorrentMoveHint: (library: string) =>
-      `Library ${library} moves files, which stops seeding. Set it to hardlink to keep seeding.`,
+      `Library "${library}" moves files and stops seeding; switch to hardlink to keep seeding.`,
     qbittorrentFailures: (count: number) =>
       `${count} ${count === 1 ? "torrent was" : "torrents were"} not scraped; MDCz retries every minute:`,
     addressHint:
@@ -221,7 +220,7 @@ export const settings = {
       official: {
         label: "Official studio sites",
         description:
-          "Studios' own websites, queried only for their own codes. Titles without actor names and unmasked plots, but the plot is a single paragraph.",
+          "Official studio websites, queried only for their own codes. Clean titles without actor names and unmasked plots, though typically not split into paragraphs.",
       },
       [Website.AVBASE]: {
         label: "avbase",

@@ -46,7 +46,7 @@ export const workbench = {
   libraryLabel: "Library",
   libraryPlaceholder: "Choose a library",
   manageLibraries: "Manage libraries",
-  noLibraries: "Create a library first: it decides where finished movies go and how videos get there.",
+  noLibraries: "Create a library first to define the output directory and placement rules.",
   createLibrary: "Create library",
   inaccessiblePathsWarning: (count: number) => `Some paths are inaccessible; ${count} skipped`,
   selectVisibleFilesAriaLabel: "Select currently visible files",

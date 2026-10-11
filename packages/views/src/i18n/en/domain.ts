@@ -10,7 +10,7 @@ export const domain = {
     cloudflare: "blocked by a Cloudflare challenge",
     rate_limited: "rate limited",
     ip_banned: "this network's IP is banned",
-    timeout: "timed out",
+    timeout: "request timed out",
     empty_shell: "returned an empty page",
     not_found: "not found",
     ambiguous: "lists several works under this number",
@@ -24,13 +24,12 @@ export const domain = {
     unavailable: (site: string, reason: string) => `${site}: ${reason}.`,
     paused: (site: string, reason: string, until: string) => `${site}: ${reason}; paused until ${until}.`,
     remedies: {
-      region_blocked:
-        "Turn on a Japanese proxy for this site, or disable it; the other enabled sites keep working without it.",
+      region_blocked: "Turn on a proxy (e.g. Japanese exit) for this site, or disable it in settings.",
       login_wall: "Add or refresh this site's cookie in the network settings.",
       cloudflare: "Reach this site through a proxy or a mirror.",
       ip_banned: "Wait for the ban to lift, switch to another proxy exit, or disable this site.",
     } as Partial<Record<FailureReason, string>>,
-    recheck: "A passing connectivity check, a proxy or cookie change, or a restart makes the site available again.",
+    recheck: "Restores automatically once connectivity checks pass, network settings update, or the app restarts.",
     openSettings: "Site settings",
     useProxy: "Proxy",
     proxyOff: "Turn on the proxy in the network settings first",
@@ -43,7 +42,8 @@ export const domain = {
     refresh_metadata: { label: "Refresh in place", description: "Refresh metadata online and compare NFO differences" },
     remerge: {
       label: "Re-merge",
-      description: "Rebuild metadata from stored site results with the current priorities, without scraping",
+      description:
+        "Rebuild metadata from stored site results with the current priorities, without making new network requests",
     },
     local_organize: { label: "Organize locally", description: "Reorganize the file and folder structure by the rules" },
     rebuild_all: {

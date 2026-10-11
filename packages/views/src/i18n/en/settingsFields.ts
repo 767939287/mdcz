@@ -135,7 +135,7 @@ const fields: Record<FieldKey, FieldText> = {
   "network.proxyType": { label: "Proxy type" },
   "network.proxy": { label: "Proxy address" },
   "network.useProxy": { label: "Use proxy" },
-  "network.directSites": { label: "Sites that bypass the proxy" },
+  "network.directSites": { label: "Direct sites (bypass proxy)" },
   "network.timeout": { label: "Timeout (s)" },
   "network.retryCount": { label: "Retry count" },
   "network.javdbUrl": {
@@ -447,14 +447,14 @@ const fields: Record<FieldKey, FieldText> = {
     description: "After syncing overviews or photos, also ask Emby to refresh person metadata and images.",
   },
   "emby.notifyAfterPublish": {
-    label: "Scan published folders",
+    label: "Refresh folder after organizing",
     description:
-      "After each published movie, ask Emby to scan just that folder so it appears without a library refresh.",
+      "After a movie is organized into the library, ask Emby to scan just that folder so it appears without a full library refresh.",
   },
   "jellyfin.notifyAfterPublish": {
-    label: "Scan published folders",
+    label: "Refresh folder after organizing",
     description:
-      "After each published movie, ask Jellyfin to scan just that folder so it appears without a library refresh.",
+      "After a movie is organized into the library, ask Jellyfin to scan just that folder so it appears without a full library refresh.",
   },
   "automation.pathMappings": {
     label: "Downloader path mappings",
@@ -479,7 +479,7 @@ const fields: Record<FieldKey, FieldText> = {
   "automation.qbittorrent.category": {
     label: "Category",
     description:
-      "MDCz takes completed torrents in this category only. Its save path must be inside a library's source directory, and outside any MoviePilot download folder with downloader monitoring on.",
+      "MDCz processes completed torrents in this category only. Its save path must be inside a library's source directory. Avoid sharing this category or path with tools like MoviePilot to prevent file conflicts.",
   },
   "notifications.webhookUrl": {
     label: "Webhook URL",
@@ -491,8 +491,8 @@ const fields: Record<FieldKey, FieldText> = {
     description: "Sent in the x-mdcz-webhook-secret header.",
   },
   "notifications.channels": {
-    label: "Message channels",
-    description: "Send a short message when a scrape finishes, and the daily digest when enabled.",
+    label: "Notification channels",
+    description: "Send a notification when a scrape finishes, and the daily digest when enabled.",
   },
   "notifications.telegramBotToken": { label: "Telegram bot token" },
   "notifications.telegramChatId": { label: "Telegram chat ID" },

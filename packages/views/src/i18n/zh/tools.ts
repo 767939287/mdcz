@@ -75,7 +75,7 @@ export const tools: Messages["tools"] = {
 
   targetDirectory: "目标目录",
   library: "库",
-  unpin: "按番号搜索，并移除固定的详情页",
+  unpin: "按番号搜索（解除固定的详情页链接）",
   targetDirectoryPlaceholder: "输入已刮削完成的输出目录",
   amazonPosterScanNote: "扫描完成后会打开批量处理弹窗，便于集中确认需要替换的海报条目。",
   startScan: "开始扫描",
@@ -146,8 +146,8 @@ export const tools: Messages["tools"] = {
   batchTranslateMode: "处理方式",
   batchTranslateModeHelp: {
     untranslated: "只翻译还没有译文的标题和简介。",
-    all: "更换模型后使用，会覆盖已有译文。",
-    restore: "去掉译文，标题和简介恢复为原文。翻译开启时，下次刷新会重新翻译。",
+    all: "更换翻译服务或模型后使用，会覆盖已有译文。",
+    restore: "清除译文，将标题和简介还原为日文原文。若后续开启翻译，刷新时将重新翻译。",
   },
   batchTranslateModeOptions: { untranslated: "仅未翻译", all: "全部重新翻译", restore: "恢复原文" },
   batchTranslateBatchSize: "每批翻译条数",

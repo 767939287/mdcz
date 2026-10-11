@@ -81,7 +81,7 @@ export const tools = {
 
   targetDirectory: "Target directory",
   library: "Library",
-  unpin: "Search by number, dropping a pinned detail page",
+  unpin: "Search by number (drop pinned detail page)",
   targetDirectoryPlaceholder: "Enter scraped output directory",
   amazonPosterScanNote: "After scanning, a batch processing dialog will open to review and select posters to replace.",
   startScan: "Start scan",
@@ -153,7 +153,7 @@ export const tools = {
   batchTranslateMode: "Action",
   batchTranslateModeHelp: {
     untranslated: "Translate only titles and plots that have no translation yet.",
-    all: "Use after switching models; existing translations are replaced.",
+    all: "Use after switching translation models; existing translations are replaced.",
     restore:
       "Remove translations so titles and plots show the source text. With translation on, the next refresh translates again.",
   },
