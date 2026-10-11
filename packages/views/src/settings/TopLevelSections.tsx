@@ -6,7 +6,7 @@ import { SettingsSectionModeProvider } from "./SettingsSectionModeContext";
 import { useSettingsServices } from "./SettingsServices";
 import { SitePriorityEditorField } from "./SitePriorityEditorField";
 import { Subsection } from "./Subsection";
-import { IntegrationAccessPanel } from "./sections/IntegrationAccessPanel";
+import { IntegrationAccessPanel, QbittorrentStatusLine, useIntegrationStatus } from "./sections/IntegrationAccessPanel";
 import { MediaServerSection } from "./sections/MediaServerSections";
 import {
   AggregationBehaviorSection,
@@ -21,6 +21,7 @@ import {
   NotificationsSection,
   PathMappingsField,
   PathsSection,
+  QbittorrentSection,
   ScrapePacingSection,
   ShortcutsSection,
   TranslateSection,
@@ -158,11 +159,12 @@ export function MediaServerTopLevelSection({ forceOpen = false }: { forceOpen?: 
   );
 }
 
-/** Downloader access and notifications; only the server receives callbacks and sends messages. */
+/** Downloader access, qBittorrent polling and notifications; only the server receives callbacks and sends messages. */
 export function AutomationTopLevelSection({ forceOpen = false }: { forceOpen?: boolean }) {
   const t = useT();
   const services = useSettingsServices();
   const search = useSettingsSearch();
+  const status = useIntegrationStatus(services.integrations);
   if ((services.settingsTarget ?? (services.isServer ? "server" : "desktop")) !== "server") return null;
 
   return (
@@ -179,9 +181,21 @@ export function AutomationTopLevelSection({ forceOpen = false }: { forceOpen?: b
       >
         {/* The key panel holds no settings fields, so a search only ever matches the fields around it. */}
         {services.integrations && !search.hasActiveFilters ? (
-          <IntegrationAccessPanel integrations={services.integrations} />
+          <IntegrationAccessPanel
+            integrations={services.integrations}
+            cloudDriveLastEventAt={status?.cloudDrive.lastEventAt ?? null}
+          />
         ) : null}
         <PathMappingsField />
+      </Subsection>
+      <Subsection
+        title={t.settings.integrations.qbittorrent}
+        description={t.settings.integrations.qbittorrentDescription}
+        className="mb-6 last:mb-0"
+      >
+        <QbittorrentSection
+          status={status && !search.hasActiveFilters ? <QbittorrentStatusLine status={status.qbittorrent} /> : null}
+        />
       </Subsection>
       <Subsection title={t.settings.integrations.notifications} className="mb-6 last:mb-0">
         <NotificationsSection />

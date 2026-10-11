@@ -36,6 +36,7 @@ import { LibraryWatchService } from "./services/libraryWatchService";
 import { MaintenanceService } from "./services/maintenanceService";
 import { MediaRootService } from "./services/mediaRootService";
 import { ServerPersistenceService } from "./services/persistenceService";
+import { QbittorrentService } from "./services/qbittorrentService";
 import { RuntimeActionService } from "./services/runtimeActionService";
 import { RuntimeLogService } from "./services/runtimeLogService";
 import { ScanQueueService } from "./services/scanQueueService";
@@ -211,6 +212,15 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     runtimeActions:
       options.services?.runtimeActions ?? new RuntimeActionService(config, networkClient, crawlerProvider),
     pending,
+    qbittorrent:
+      options.services?.qbittorrent ??
+      new QbittorrentService({
+        config,
+        automation,
+        libraries,
+        persistence,
+        logger: runtimeLogs.getLogger("qBittorrent"),
+      }),
     scans,
     scrape,
     serverPaths: options.services?.serverPaths ?? new ServerPathService(mediaRoots, config, libraries),
@@ -250,6 +260,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     await services.auth.status();
     await services.libraryWatch.start();
     services.automation.start();
+    services.qbittorrent.start();
   });
 
   fastify.addHook("preClose", async () => {
@@ -261,7 +272,9 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     if (closed) return;
     closed = true;
     services.automation.close();
-    const results = await Promise.allSettled([services.libraryWatch.close()]);
+    // An in-flight poll submits through library watch, so it ends first.
+    const results = await Promise.allSettled([services.qbittorrent.close()]);
+    results.push(...(await Promise.allSettled([services.libraryWatch.close()])));
     results.push(
       ...(await Promise.allSettled([services.scans.close(), services.scrape.close(), services.maintenance.close()])),
     );

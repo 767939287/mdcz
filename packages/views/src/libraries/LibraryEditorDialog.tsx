@@ -40,6 +40,8 @@ export interface LibraryEditorDialogProps {
   onPreviewNaming: (settings: MediaLibrarySettingsInput) => Promise<NamingPreviewItem[]>;
   loadDirectorySuggestions?: (path: string) => Promise<PathAutocompleteResult>;
   browseDirectory?: () => Promise<string | null>;
+  /** Whether the source directory holds .strm stubs. */
+  probeStubs?: (sourcePath: string) => Promise<boolean>;
 }
 
 const emptySettings = (): MediaLibrarySettingsInput => ({
@@ -65,12 +67,14 @@ export function LibraryEditorDialog({
   onPreviewNaming,
   loadDirectorySuggestions,
   browseDirectory,
+  probeStubs,
 }: LibraryEditorDialogProps) {
   const t = useT();
   const [settings, setSettings] = useState<MediaLibrarySettingsInput>(emptySettings);
   const [submitError, setSubmitError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+  const [sourceHasStubs, setSourceHasStubs] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -78,6 +82,24 @@ export function LibraryEditorDialog({
     setSubmitError("");
     setShowErrors(false);
   }, [library, importExisting, open]);
+
+  useEffect(() => {
+    setSourceHasStubs(false);
+    const sourcePath = settings.sourcePath?.trim();
+    if (!open || !probeStubs || !sourcePath) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      // A path still being typed does not exist yet; that only means no hint.
+      probeStubs(sourcePath).then(
+        (found) => active && setSourceHasStubs(found),
+        () => undefined,
+      );
+    }, 500);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [open, probeStubs, settings.sourcePath]);
 
   const parsed = useMemo(() => mediaLibrarySettingsSchema.safeParse(settings), [settings]);
   const fieldErrors = useMemo(() => {
@@ -159,6 +181,9 @@ export function LibraryEditorDialog({
               </Select>
             )}
           </Field>
+          {sourceHasStubs && placement !== "inPlace" ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{t.libraries.stubSourceHint}</p>
+          ) : null}
           {needsOutput ? (
             <Field
               label={t.libraries.fields.outputPath}

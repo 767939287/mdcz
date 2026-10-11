@@ -55,7 +55,8 @@ export const libraries: Messages["libraries"] = {
     symlink: { label: "软链接", description: "视频留在原处，在输出目录的元数据旁放一个符号链接。" },
     strm: {
       label: ".strm 链接",
-      description: "视频留在网盘，在输出目录的元数据旁为每个视频写一个指向它的 .strm 文件。",
+      description:
+        "视频留在原处（本地或网盘均可），在输出目录的元数据旁为每个视频写一个指向它的 .strm 文件。媒体服务器需能以与 MDCz 相同的路径访问视频。",
     },
     metadataOnly: {
       label: "仅元数据",
@@ -88,5 +89,11 @@ export const libraries: Messages["libraries"] = {
     output: "输出",
     noOutput: "视频旁边",
     automationOff: "手动",
+    cloudDriveLastEvent: (time) =>
+      time
+        ? `该媒体库最近一次收到 CloudDrive2 事件：${time}`
+        : "MDCz 启动以来该媒体库尚未收到 CloudDrive2 事件，请检查 Webhook 和云端路径。",
   },
+  stubSourceHint:
+    "来源目录中有 .strm 文件。建议选择「就地」：元数据写在每个 .strm 旁边，.strm 文件也留在 STRM 助手预期的位置。",
 };

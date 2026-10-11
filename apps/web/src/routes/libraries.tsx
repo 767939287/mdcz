@@ -22,6 +22,12 @@ export function LibrariesPage() {
     })),
   });
   const pendingQ = useQuery({ queryKey: queryKeys.pending.all, queryFn: () => api.pending.list(), retry: false });
+  const integrationsQ = useQuery({
+    queryKey: queryKeys.integrations.status,
+    queryFn: () => api.integrations.status(),
+    refetchInterval: 30_000,
+    retry: false,
+  });
   const pendingCounts: Record<string, number> = {};
   for (const item of pendingQ.data?.items ?? [])
     if (item.libraryId) pendingCounts[item.libraryId] = (pendingCounts[item.libraryId] ?? 0) + 1;
@@ -32,6 +38,7 @@ export function LibrariesPage() {
       libraries={libraries}
       summaries={Object.fromEntries(libraries.map((library, index) => [library.id, summaryQs[index]?.data]))}
       pendingCounts={pendingCounts}
+      cloudDriveEvents={integrationsQ.data?.cloudDrive.libraries}
       onImport={(library) => {
         prepareMaintenanceSetup({ scanDir: library.sourcePath, libraryId: library.id, presetId: "import_local" });
         void navigate({ to: "/workbench", search: { intent: "maintenance" } });
@@ -70,6 +77,7 @@ export function LibrariesPage() {
           entries: result.entries.map((entry) => ({ label: entry.label, path: entry.path })),
         };
       }}
+      probeStubs={async (sourcePath) => (await api.libraries.probeStubs({ sourcePath })).hasStubs}
     />
   );
 }

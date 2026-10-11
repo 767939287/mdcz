@@ -178,12 +178,27 @@ export const settings = {
     revoke: "Revoke",
     lastUsed: (value: string | null) => (value ? `Last used ${value}` : "Never used"),
     noKeys: "No API keys yet.",
-    qbittorrentTitle: "qBittorrent",
-    qbittorrentHint:
-      'Paste into Options → Downloads → "Run external program on torrent finished". %F is the finished file or folder.',
+    commandTitle: "Command on download finished",
+    commandHint:
+      'For downloaders MDCz does not poll. In qBittorrent, paste into Options → Downloads → "Run external program on torrent finished"; %F is the finished file or folder. Feed a library set to hardlink so the torrent keeps seeding.',
     clouddriveTitle: "CloudDrive2",
     clouddriveHint:
       "In CloudDrive2's file system watcher, POST to this URL with the header Authorization: Bearer <API key>.",
+    clouddriveLastEvent: (time: string | null) =>
+      time ? `Last event from CloudDrive2: ${time}` : "No event from CloudDrive2 since MDCz started.",
+    qbittorrent: "qBittorrent",
+    qbittorrentDescription:
+      "MDCz checks qBittorrent every minute and scrapes torrents that finished in the category, so nothing has to run inside the downloader's container. Torrents already finished when polling begins are left alone.",
+    qbittorrentOff: "Polling is off until the URL and category are set.",
+    qbittorrentError: (error: string) => `qBittorrent check failed: ${error}`,
+    qbittorrentChecked: (time: string, library: string | null) =>
+      library ? `Checked ${time}; finished torrents go to library ${library}.` : `Checked ${time}.`,
+    qbittorrentNoLibrary:
+      "The category's save path is not inside any library's source directory, so its torrents cannot be scraped. Add a library or a path mapping.",
+    qbittorrentMoveHint: (library: string) =>
+      `Library ${library} moves files, which stops seeding. Set it to hardlink to keep seeding.`,
+    qbittorrentFailures: (count: number) =>
+      `${count} ${count === 1 ? "torrent was" : "torrents were"} not scraped; MDCz retries every minute:`,
     addressHint:
       "These use the address this browser sees. If the downloader runs in another container, replace it with an address that container can reach.",
     sendTest: "Send test message",

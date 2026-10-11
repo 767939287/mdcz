@@ -1,12 +1,73 @@
 import { toErrorMessage } from "@mdcz/shared/error";
-import type { ApiKeyDto } from "@mdcz/shared/serverDtos";
+import type { ApiKeyDto, IntegrationStatusResponse } from "@mdcz/shared/serverDtos";
 import { Button, Input } from "@mdcz/ui";
 import { Copy, Loader2, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useT } from "../../i18n";
 import { type SettingsIntegrationServices, useSettingsNotifier } from "../SettingsServices";
 
-export function IntegrationAccessPanel({ integrations }: { integrations: SettingsIntegrationServices }) {
+const STATUS_REFRESH_MS = 5_000;
+
+/** Polls the integrations' liveness while mounted; settings autosave, so a fix shows within seconds. */
+export function useIntegrationStatus(integrations?: SettingsIntegrationServices): IntegrationStatusResponse | null {
+  const notifier = useSettingsNotifier();
+  const [status, setStatus] = useState<IntegrationStatusResponse | null>(null);
+  useEffect(() => {
+    if (!integrations) return;
+    let active = true;
+    const refresh = () =>
+      integrations.status().then(
+        (next) => active && setStatus(next),
+        (error: unknown) => notifier.error(toErrorMessage(error)),
+      );
+    void refresh();
+    const timer = window.setInterval(refresh, STATUS_REFRESH_MS);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [integrations, notifier]);
+  return status;
+}
+
+export function QbittorrentStatusLine({ status }: { status: IntegrationStatusResponse["qbittorrent"] }) {
+  const t = useT();
+  const text = t.settings.integrations;
+  if (!status.configured || !status.lastPollAt)
+    return <p className="py-2 text-xs text-muted-foreground">{text.qbittorrentOff}</p>;
+  if (status.error) return <p className="py-2 text-xs text-destructive">{text.qbittorrentError(status.error)}</p>;
+  return (
+    <div className="space-y-1 py-2 text-xs">
+      <p className="text-muted-foreground">
+        {text.qbittorrentChecked(new Date(status.lastPollAt).toLocaleString(), status.library?.name ?? null)}
+      </p>
+      {status.library ? null : <p className="text-amber-600 dark:text-amber-400">{text.qbittorrentNoLibrary}</p>}
+      {status.library?.placement === "move" ? (
+        <p className="text-amber-600 dark:text-amber-400">{text.qbittorrentMoveHint(status.library.name)}</p>
+      ) : null}
+      {status.failures.length ? (
+        <div className="text-destructive">
+          <p>{text.qbittorrentFailures(status.failures.length)}</p>
+          <ul className="list-disc pl-4">
+            {status.failures.map((failure) => (
+              <li key={failure.name} className="break-all">
+                {failure.name}: {failure.error}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function IntegrationAccessPanel({
+  integrations,
+  cloudDriveLastEventAt,
+}: {
+  integrations: SettingsIntegrationServices;
+  cloudDriveLastEventAt: string | null;
+}) {
   const t = useT();
   const notifier = useSettingsNotifier();
   const [keys, setKeys] = useState<ApiKeyDto[]>([]);
@@ -15,7 +76,7 @@ export function IntegrationAccessPanel({ integrations }: { integrations: Setting
   const [creating, setCreating] = useState(false);
   const shownKey = secret ?? "<API key>";
   // A query parameter survives Windows backslashes and spaces in %F, which JSON quoting would not.
-  const qbittorrentCommand = `curl -fsS -X POST -G -H "Authorization: Bearer ${shownKey}" --data-urlencode "path=%F" ${integrations.origin}/api/automation/scrape/start`;
+  const finishedCommand = `curl -fsS -X POST -G -H "Authorization: Bearer ${shownKey}" --data-urlencode "path=%F" ${integrations.origin}/api/automation/scrape/start`;
   const run = async (action: () => Promise<void>) => {
     try {
       await action();
@@ -85,11 +146,16 @@ export function IntegrationAccessPanel({ integrations }: { integrations: Setting
       </ul>
 
       <p className="text-xs text-muted-foreground">{t.settings.integrations.addressHint}</p>
-      <Snippet title={t.settings.integrations.qbittorrentTitle} hint={t.settings.integrations.qbittorrentHint}>
-        <CopyLine value={qbittorrentCommand} />
+      <Snippet title={t.settings.integrations.commandTitle} hint={t.settings.integrations.commandHint}>
+        <CopyLine value={finishedCommand} />
       </Snippet>
       <Snippet title={t.settings.integrations.clouddriveTitle} hint={t.settings.integrations.clouddriveHint}>
         <CopyLine value={`${integrations.origin}/api/webhooks/clouddrive`} />
+        <p className="text-xs text-muted-foreground">
+          {t.settings.integrations.clouddriveLastEvent(
+            cloudDriveLastEventAt ? new Date(cloudDriveLastEventAt).toLocaleString() : null,
+          )}
+        </p>
       </Snippet>
     </div>
   );

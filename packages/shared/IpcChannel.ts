@@ -71,6 +71,7 @@ export enum IpcChannel {
   Libraries_Update = "libraries:update",
   Libraries_Delete = "libraries:delete",
   Libraries_PreviewNaming = "libraries:preview-naming",
+  Libraries_ProbeStubs = "libraries:probe-stubs",
 
   Pending_List = "pending:list",
   Pending_Detail = "pending:detail",

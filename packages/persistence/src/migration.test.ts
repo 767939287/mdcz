@@ -52,7 +52,15 @@ describe("Persistence migration baseline", () => {
         .map((row) => (row as { name: string }).name);
       expect(tables).toContain("scrape_runs");
       expect(tables).toEqual(
-        expect.arrayContaining(["media_libraries", "pending_items", "site_results", "api_keys", "auth_sessions"]),
+        expect.arrayContaining([
+          "media_libraries",
+          "pending_items",
+          "site_results",
+          "api_keys",
+          "auth_sessions",
+          "downloader_sources",
+          "downloader_torrents",
+        ]),
       );
       expect(tables).not.toContain("scrape_run_items");
       expect(tables).not.toContain("publication_journal");

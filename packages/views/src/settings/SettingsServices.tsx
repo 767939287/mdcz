@@ -2,6 +2,7 @@ import type { Configuration } from "@mdcz/shared/config";
 import type { Website } from "@mdcz/shared/enums";
 import type {
   ApiKeyDto,
+  IntegrationStatusResponse,
   NetworkCheckCookiesResponse,
   SiteConnectivityProbeResponse,
   TranslateTestInputDto,
@@ -58,6 +59,7 @@ export interface SettingsIntegrationServices {
   revokeApiKey: (id: string) => Promise<void>;
   /** Sends a message through each enabled channel using the settings as edited, saved or not. */
   testNotification: (settings: Configuration["notifications"]) => Promise<void>;
+  status: () => Promise<IntegrationStatusResponse>;
 }
 
 export interface SettingsServices {

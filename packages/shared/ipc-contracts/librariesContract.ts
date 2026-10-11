@@ -5,6 +5,8 @@ import type {
   MediaLibraryIdInput,
   MediaLibraryListResponse,
   MediaLibrarySettingsInput,
+  MediaLibrarySourceInput,
+  MediaLibraryStubProbeResponse,
   MediaLibraryUpdateInput,
 } from "../mediaLibrary";
 import type {
@@ -23,6 +25,7 @@ export type LibrariesIpcContract = {
   [IpcChannel.Libraries_Update]: IpcProcedure<MediaLibraryUpdateInput, MediaLibraryDto>;
   [IpcChannel.Libraries_Delete]: IpcProcedure<MediaLibraryIdInput, { success: true }>;
   [IpcChannel.Libraries_PreviewNaming]: IpcProcedure<MediaLibrarySettingsInput, { items: NamingPreviewItem[] }>;
+  [IpcChannel.Libraries_ProbeStubs]: IpcProcedure<MediaLibrarySourceInput, MediaLibraryStubProbeResponse>;
   [IpcChannel.Pending_List]: IpcProcedure<void, PendingListResponse>;
   [IpcChannel.Pending_Detail]: IpcProcedure<PendingIdInput, PendingDetailResponse>;
   [IpcChannel.Pending_Retry]: IpcProcedure<PendingRetryInput, PendingRetryResponse>;

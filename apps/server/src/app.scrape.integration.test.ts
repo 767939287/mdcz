@@ -659,6 +659,52 @@ describe("buildServer scrape integration", () => {
   });
 
   it.each([
+    ["inPlace", "https://cloud.invalid/ABC-123.mp4"],
+    ["move", "cloud/ABC-123.mp4"],
+    ["strm", "https://cloud.invalid/ABC-123.mp4"],
+  ] as const)("scrapes a .strm stub source without reading its target (%s)", async (placement, target) => {
+    const root = await createTempRoot("stub-source");
+    const output = await createTempRoot("stub-output");
+    await writeFile(join(root, "ABC-123.strm"), `${target}\n`);
+    const imageServer = await startTestImageServer();
+    const { fastify, services } = await createTestServer({
+      scrapeAggregation: createTestAggregation(`${imageServer.url}/image.png`),
+    });
+    const token = await loginAsAdmin(fastify);
+    const headers = { authorization: `Bearer ${token}` };
+    const probe = await fastify.inject({
+      method: "GET",
+      url: `/trpc/libraries.probeStubs?input=${encodeURIComponent(JSON.stringify({ sourcePath: root }))}`,
+      headers,
+    });
+    const { rootId, libraryId } = await createTestLibrary(fastify, token, root, { placement, outputPath: output });
+    await services.config.update({ download: { downloadSceneImages: false, downloadTrailer: false } });
+    const started = await fastify.inject({
+      method: "POST",
+      url: "/trpc/scrape.start",
+      headers,
+      payload: { executionMode: "batch", refs: [{ rootId, relativePath: "ABC-123.strm" }], libraryId },
+    });
+    const taskId = started.json().result.data.runId;
+
+    expect(probe.json().result.data).toEqual({ hasStubs: true });
+    if (placement === "strm") {
+      // A stub of a stub would point at MDCz's copy of a link, never at the video.
+      await waitForScrapeRunStatus(fastify, token, taskId, "failed");
+      expect((await services.scrape.snapshot({ taskId })).items[0]?.error).toContain(
+        "A .strm source is already a link",
+      );
+      return;
+    }
+    await waitForScrapeRunStatus(fastify, token, taskId, "completed");
+    const stub = placement === "inPlace" ? join(root, "ABC-123.strm") : join(output, "Actor A/ABC-123/ABC-123.strm");
+    // A moved stub's relative target is resolved against where the stub was, so it still reaches the video.
+    expect(await readFile(stub, "utf8")).toBe(`${placement === "move" ? join(root, target) : target}\n`);
+    expect(await readFile(join(dirname(stub), "ABC-123.nfo"), "utf8")).toContain("Runtime Title ABC-123");
+    if (placement === "move") await expect(stat(join(root, "ABC-123.strm"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each([
     "metadataOnly",
     "strm",
   ] as const)("serves metadata beside an untouched source and retains registered outputs (%s)", async (placement) => {

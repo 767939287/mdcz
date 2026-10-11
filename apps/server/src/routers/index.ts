@@ -1,8 +1,10 @@
 import { MediaDirectoryUnavailableError, toMediaLibraryDto } from "@mdcz/runtime/library";
+import { containsStrmFiles } from "@mdcz/runtime/scrape/utils/strm";
 import { notificationsSchema } from "@mdcz/shared/config";
 import {
   mediaLibraryIdInputSchema,
   mediaLibrarySettingsSchema,
+  mediaLibrarySourceInputSchema,
   mediaLibraryUpdateInputSchema,
 } from "@mdcz/shared/mediaLibrary";
 import {
@@ -249,6 +251,9 @@ export const appRouter = t.router({
     previewNaming: protectedProcedure
       .input(mediaLibrarySettingsSchema)
       .mutation(async ({ ctx, input }) => ({ items: await ctx.services.libraries.previewNaming(input) })),
+    probeStubs: protectedProcedure
+      .input(mediaLibrarySourceInputSchema)
+      .query(async ({ input }) => ({ hasStubs: await containsStrmFiles(input.sourcePath) })),
   }),
   pending: t.router({
     list: protectedProcedure.query(async ({ ctx }) => await ctx.services.pending.list()),
@@ -284,6 +289,12 @@ export const appRouter = t.router({
       await ctx.services.automation.testNotification(input);
       return { success: true as const };
     }),
+  }),
+  integrations: t.router({
+    status: protectedProcedure.query(({ ctx }) => ({
+      cloudDrive: ctx.services.libraryWatch.cloudDriveActivity(),
+      qbittorrent: ctx.services.qbittorrent.status(),
+    })),
   }),
   mediaRoots: t.router({
     ensurePath: protectedProcedure

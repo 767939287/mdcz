@@ -61,6 +61,7 @@ export function LibrariesPage() {
       }}
       onPreviewNaming={async (settings) => (await ipc.libraries.previewNaming(settings)).items}
       browseDirectory={async () => (await ipc.file.browse("directory")).paths?.[0]?.trim() || null}
+      probeStubs={async (sourcePath) => (await ipc.libraries.probeStubs(sourcePath)).hasStubs}
     />
   );
 }

@@ -161,11 +161,24 @@ export const settings: Messages["settings"] = {
     revoke: "吊销",
     lastUsed: (value) => (value ? `最近使用 ${value}` : "从未使用"),
     noKeys: "还没有 API Key。",
-    qbittorrentTitle: "qBittorrent",
-    qbittorrentHint: "粘贴到 选项 → 下载 →「Torrent 完成时运行外部程序」。%F 为完成的文件或文件夹。",
+    commandTitle: "下载完成时运行命令",
+    commandHint:
+      "用于 MDCz 不轮询的下载器。在 qBittorrent 中粘贴到 选项 → 下载 →「Torrent 完成时运行外部程序」，%F 为完成的文件或文件夹。对应媒体库请选用硬链接，种子才能继续做种。",
     clouddriveTitle: "CloudDrive2",
     clouddriveHint:
       "在 CloudDrive2 的文件系统监控中，向此地址发送 POST，并带上请求头 Authorization: Bearer <API Key>。",
+    clouddriveLastEvent: (time) =>
+      time ? `最近一次收到 CloudDrive2 事件：${time}` : "MDCz 启动以来尚未收到 CloudDrive2 事件。",
+    qbittorrent: "qBittorrent",
+    qbittorrentDescription:
+      "MDCz 每分钟检查一次 qBittorrent，刮削该分类中下载完成的种子，下载器容器内无需运行任何脚本。开始轮询时已完成的种子不会处理。",
+    qbittorrentOff: "填写地址和分类后开始轮询。",
+    qbittorrentError: (error) => `qBittorrent 检查失败：${error}`,
+    qbittorrentChecked: (time, library) =>
+      library ? `${time} 已检查；完成的种子进入媒体库「${library}」。` : `${time} 已检查。`,
+    qbittorrentNoLibrary: "该分类的保存路径不在任何媒体库的源目录内，其中的种子无法刮削。请添加媒体库或路径映射。",
+    qbittorrentMoveHint: (library) => `媒体库「${library}」会移动文件，种子将停止做种。改为硬链接可继续做种。`,
+    qbittorrentFailures: (count) => `${count} 个种子未能刮削，MDCz 每分钟重试：`,
     addressHint: "以下地址取自当前浏览器。若下载器运行在其他容器中，请换成该容器能访问到的地址。",
     sendTest: "发送测试消息",
     sendingTest: "发送中...",

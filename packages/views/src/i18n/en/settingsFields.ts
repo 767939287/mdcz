@@ -462,6 +462,25 @@ const fields: Record<FieldKey, FieldText> = {
       "When the downloader runs in another container or host, translate the paths it reports into paths MDCz can read. The longest matching prefix wins.",
     aliases: ["remote path", "docker", "qbittorrent"],
   },
+  "automation.qbittorrent.url": {
+    label: "qBittorrent web UI URL",
+    description: "For example http://qbittorrent:8080. Leave empty to stop polling.",
+    aliases: ["qbittorrent", "downloader", "torrent"],
+  },
+  "automation.qbittorrent.apiKey": {
+    label: "qBittorrent API key",
+    description: "qBittorrent 5.2 or newer. Used instead of the username and password.",
+  },
+  "automation.qbittorrent.username": {
+    label: "qBittorrent username",
+    description: "For older versions. Leave empty if qBittorrent skips authentication for MDCz's address.",
+  },
+  "automation.qbittorrent.password": { label: "qBittorrent password" },
+  "automation.qbittorrent.category": {
+    label: "Category",
+    description:
+      "MDCz takes completed torrents in this category only. Its save path must be inside a library's source directory, and outside any MoviePilot download folder with downloader monitoring on.",
+  },
   "notifications.webhookUrl": {
     label: "Webhook URL",
     description: "Receives every task start and finish as JSON.",

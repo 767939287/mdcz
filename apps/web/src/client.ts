@@ -229,6 +229,7 @@ export const api: ServerApiContract = {
     update: (input) => trpcMutation("libraries.update", input),
     delete: (input) => trpcMutation("libraries.delete", input),
     previewNaming: (input) => trpcMutation("libraries.previewNaming", input),
+    probeStubs: (input) => trpcQuery("libraries.probeStubs", input),
   },
   pending: {
     list: () => trpcQuery("pending.list"),
@@ -244,6 +245,9 @@ export const api: ServerApiContract = {
   },
   notifications: {
     test: (input) => trpcMutation("notifications.test", input),
+  },
+  integrations: {
+    status: () => trpcQuery("integrations.status"),
   },
   mediaRoots: {
     ensurePath: (input) => trpcMutation("mediaRoots.ensurePath", input),

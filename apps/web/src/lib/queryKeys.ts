@@ -27,6 +27,9 @@ export const queryKeys = {
   libraries: {
     all: ["libraries"] as const,
   },
+  integrations: {
+    status: ["integrations", "status"] as const,
+  },
   pending: {
     all: ["pending"] as const,
     detail: (id: string) => ["pending", "detail", id] as const,

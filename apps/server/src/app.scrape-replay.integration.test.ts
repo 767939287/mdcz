@@ -35,9 +35,7 @@ interface ReplayScenario {
 }
 
 const fixturesRoot = resolve(import.meta.dirname, "../../../tests/fixtures/network");
-const hasNetworkFixtures =
-  existsSync(fixturesRoot) &&
-  existsSync(join(fixturesRoot, "snos-301", "manifest.json"));
+const hasNetworkFixtures = existsSync(fixturesRoot) && existsSync(join(fixturesRoot, "snos-301", "manifest.json"));
 const mockMediaRoot = resolve(import.meta.dirname, "../../../tests/fixtures/mock-media");
 const recordedThisRun = new Set<string>();
 const imageExtensions = new Set([".jpg", ".png", ".webp"]);

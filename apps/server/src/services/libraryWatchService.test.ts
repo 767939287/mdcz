@@ -182,6 +182,11 @@ describe("LibraryWatchService", () => {
         { action: "create", isDir: false, sourceFile: "/cloud/inner/release/inner-new.mp4", destinationFile: "" },
         { action: "create", isDir: false, sourceFile: "/elsewhere/ignored.mp4", destinationFile: "" },
       ]);
+      // Every arrival counts toward the webhook's liveness; only routed changes count toward a library's.
+      expect(service.cloudDriveActivity()).toEqual({
+        lastEventAt: expect.any(String),
+        libraries: { inner: expect.any(String) },
+      });
       await harness.advance(5_000);
       await harness.advance(120_000);
       expect(harness.scrape.start).not.toHaveBeenCalled();

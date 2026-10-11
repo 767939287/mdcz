@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, posix, resolve, win32 } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { atomicWriteFile } from "@mdcz/media-store";
 import { localPathStyle } from "@mdcz/shared/localPath";
@@ -17,6 +17,20 @@ export interface StrmTargetInfo {
 }
 
 export const isStrmFile = (filePath: string): boolean => extname(filePath).toLowerCase() === ".strm";
+
+/** Whether a directory holds .strm stubs, reading at most `maxEntries` entries breadth first so a huge tree stays cheap. */
+export const containsStrmFiles = async (directory: string, maxEntries = 2_000): Promise<boolean> => {
+  const queue = [directory];
+  let seen = 0;
+  for (let current = queue.shift(); current !== undefined && seen < maxEntries; current = queue.shift()) {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      seen += 1;
+      if (entry.isFile() && isStrmFile(entry.name)) return true;
+      if (entry.isDirectory()) queue.push(join(current, entry.name));
+    }
+  }
+  return false;
+};
 
 const parseStrmContent = (
   content: string,

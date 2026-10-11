@@ -75,3 +75,15 @@ ALTER TABLE `library_item_files` ADD COLUMN `retained_source_identity` text;
 CREATE INDEX `library_item_files_retained_source_idx` ON `library_item_files` (`retained_source_identity`);
 --> statement-breakpoint
 ALTER TABLE `library_items` DROP COLUMN `uncensored_ambiguous`;
+--> statement-breakpoint
+CREATE TABLE `downloader_sources` (
+  `key` text PRIMARY KEY NOT NULL,
+  `since` integer NOT NULL
+) STRICT;
+--> statement-breakpoint
+CREATE TABLE `downloader_torrents` (
+  `source_key` text NOT NULL REFERENCES `downloader_sources`(`key`) ON DELETE CASCADE,
+  `hash` text NOT NULL,
+  `handled_at` integer NOT NULL,
+  PRIMARY KEY(`source_key`, `hash`)
+) STRICT;

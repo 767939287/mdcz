@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createMediaRoot } from "@mdcz/media-store";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTempDirectory } from "../../../tests/harness/tempDirectory";
@@ -673,7 +673,7 @@ describe("LibraryRepository", () => {
         ],
       },
     });
-    expect(repository.summary({ pathPrefixes: ["/root-1/"] }).issues).toEqual({
+    expect(repository.summary({ pathPrefixes: [`${resolve("/root-1")}/`] }).issues).toEqual({
       missingPoster: 1,
       missingBackdrop: 1,
       missingSynopsis: 0,
@@ -689,7 +689,7 @@ describe("LibraryRepository", () => {
     });
     await expect(ids({ health: "missingBackdrop", includeBackdrop: false })).resolves.toEqual([]);
     await expect(ids({ health: "missingBackdrop", includeBackdrop: true })).resolves.toEqual(["bare", "translated"]);
-    await expect(ids({ health: "duplicate", pathPrefixes: ["/root-1"] })).resolves.toEqual(["healthy"]);
+    await expect(ids({ health: "duplicate", pathPrefixes: [resolve("/root-1")] })).resolves.toEqual(["healthy"]);
     await expect(ids({ actor: "Bob" })).resolves.toEqual(["bare", "translated"]);
     await expect(ids({ studio: "S2", tag: "drama" })).resolves.toEqual([]);
     await expect(ids({ tag: "3p" })).resolves.toEqual(["bare"]);

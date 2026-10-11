@@ -8,6 +8,7 @@ import {
   LLM_REASONING_OPTIONS,
   LLM_SERVICE_TYPE_OPTIONS,
 } from "./llm";
+import { PLACEMENT_MODES } from "./mediaLibrary";
 import { assetRefSchema, type RootFileRef, rootFileRefSchema } from "./mediaRef";
 import { normalizedCropRegionSchema } from "./posterCrop";
 import { FAILURE_REASONS, siteHealthSchema } from "./siteResults";
@@ -912,6 +913,26 @@ export type ApiKeyListResponse = z.infer<typeof apiKeyListResponseSchema>;
 /** The key itself is shown only here; the server keeps a hash. */
 export const apiKeyCreateResponseSchema = z.object({ key: apiKeySchema, secret: z.string() });
 export type ApiKeyCreateResponse = z.infer<typeof apiKeyCreateResponseSchema>;
+
+/** Liveness of the downloader and cloud drive integrations, so a misconfigured one is visible instead of silent. */
+export const integrationStatusResponseSchema = z.object({
+  /** Times are kept in memory: null means no webhook arrived since the server started. */
+  cloudDrive: z.object({
+    lastEventAt: z.string().nullable(),
+    /** Per library id, the last webhook that touched its cloud path. */
+    libraries: z.record(z.string(), z.string()),
+  }),
+  qbittorrent: z.object({
+    configured: z.boolean(),
+    lastPollAt: z.string().nullable(),
+    error: z.string().nullable(),
+    /** The library whose source holds the category's save path. */
+    library: z.object({ id: z.string(), name: z.string(), placement: z.enum(PLACEMENT_MODES) }).nullable(),
+    failures: z.array(z.object({ name: z.string(), error: z.string() })),
+  }),
+});
+
+export type IntegrationStatusResponse = z.infer<typeof integrationStatusResponseSchema>;
 
 /** CloudDrive2's file_system_watcher payload; unknown fields are ignored and booleans may arrive as strings. */
 export const cloudDriveNotifySchema = z.object({

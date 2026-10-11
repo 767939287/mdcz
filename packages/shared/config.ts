@@ -298,8 +298,22 @@ const pathMappingSchema = z.object({
   to: z.string().trim().min(1),
 });
 
+/** MDCz polls qBittorrent for completed torrents in one category; an empty URL or category turns polling off. */
+const qbittorrentSchema = z.object({
+  url: z
+    .url({ protocol: /^https?$/u })
+    .or(z.literal(""))
+    .default(""),
+  /** qBittorrent 5.2+; takes precedence over the username and password. */
+  apiKey: z.string().default(""),
+  username: z.string().default(""),
+  password: z.string().default(""),
+  category: z.string().trim().default(""),
+});
+
 const automationSchema = z.object({
   pathMappings: z.array(pathMappingSchema).default([]),
+  qbittorrent: qbittorrentSchema.default(() => qbittorrentSchema.parse({})),
 });
 
 export const NOTIFICATION_CHANNELS = ["telegram", "bark", "ntfy"] as const;

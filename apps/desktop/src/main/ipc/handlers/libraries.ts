@@ -1,10 +1,12 @@
 import type { ServiceContainer } from "@main/container";
 import { toMediaLibraryDto } from "@mdcz/runtime/library";
+import { containsStrmFiles } from "@mdcz/runtime/scrape/utils/strm";
 import { IpcChannel } from "@mdcz/shared/IpcChannel";
 import type { IpcRouterContract } from "@mdcz/shared/ipcContract";
 import {
   mediaLibraryIdInputSchema,
   mediaLibrarySettingsSchema,
+  mediaLibrarySourceInputSchema,
   mediaLibraryUpdateInputSchema,
 } from "@mdcz/shared/mediaLibrary";
 import {
@@ -24,6 +26,7 @@ export const createLibrariesHandlers = (
   | typeof IpcChannel.Libraries_Update
   | typeof IpcChannel.Libraries_Delete
   | typeof IpcChannel.Libraries_PreviewNaming
+  | typeof IpcChannel.Libraries_ProbeStubs
   | typeof IpcChannel.Pending_List
   | typeof IpcChannel.Pending_Detail
   | typeof IpcChannel.Pending_Retry
@@ -60,6 +63,11 @@ export const createLibrariesHandlers = (
       .action(({ input }) =>
         withIpcErrorHandling("preview library naming", async () => ({ items: await libraries.previewNaming(input) })),
       ),
+    [IpcChannel.Libraries_ProbeStubs]: t.procedure.input(mediaLibrarySourceInputSchema).action(({ input }) =>
+      withIpcErrorHandling("probe library source", async () => ({
+        hasStubs: await containsStrmFiles(input.sourcePath),
+      })),
+    ),
     [IpcChannel.Pending_List]: t.procedure.action(() =>
       withIpcErrorHandling("list pending", async () => await pendingService.list()),
     ),

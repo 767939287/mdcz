@@ -63,7 +63,7 @@ export const libraries = {
     strm: {
       label: ".strm link",
       description:
-        "Keep videos on the cloud drive; write a .strm file pointing at each one, next to the metadata in the output directory.",
+        "Keep videos where they are, local or on a cloud drive; write a .strm file pointing at each one next to the metadata in the output directory. The media server must see the video at the same path as MDCz.",
     },
     metadataOnly: {
       label: "Metadata only",
@@ -104,5 +104,11 @@ export const libraries = {
     output: "Output",
     noOutput: "Next to the videos",
     automationOff: "Manual",
+    cloudDriveLastEvent: (time: string | null) =>
+      time
+        ? `Last CloudDrive2 event for this library: ${time}`
+        : "No CloudDrive2 event for this library since MDCz started. Check the webhook and the cloud path.",
   },
+  stubSourceHint:
+    "This source holds .strm stubs. Choose In place: metadata is written beside each stub and the stubs stay where a STRM helper expects them.",
 };

@@ -262,6 +262,25 @@ export const authSessions = sqliteTable("auth_sessions", {
   lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+// A downloader category MDCz polls, keyed by client URL and category. Torrents that completed before `since` were
+// already there when polling began and are left alone.
+export const downloaderSources = sqliteTable("downloader_sources", {
+  key: text("key").primaryKey(),
+  since: integer("since", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const downloaderTorrents = sqliteTable(
+  "downloader_torrents",
+  {
+    sourceKey: text("source_key")
+      .notNull()
+      .references(() => downloaderSources.key, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    handledAt: integer("handled_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.sourceKey, table.hash] })],
+);
+
 export const schema = {
   mediaRoots,
   mediaLibraries,
@@ -277,6 +296,8 @@ export const schema = {
   pendingItems,
   apiKeys,
   authSessions,
+  downloaderSources,
+  downloaderTorrents,
 };
 
 export type MediaRootRow = typeof mediaRoots.$inferSelect;

@@ -68,6 +68,7 @@ export const createSettingsServices = (queryClient: QueryClient): SettingsServic
     testNotification: async (settings) => {
       await api.notifications.test(settings);
     },
+    status: async () => await api.integrations.status(),
   },
   isServer: true,
   settingsTarget: "server",

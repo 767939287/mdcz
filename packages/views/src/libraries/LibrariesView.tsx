@@ -19,6 +19,8 @@ export interface LibrariesViewProps {
   /** Per library id; absent until the summary arrives. */
   summaries?: Record<string, LibrarySummaryResponse | undefined>;
   pendingCounts?: Record<string, number>;
+  /** Server only: per library id, when a CloudDrive2 webhook last touched its cloud path. */
+  cloudDriveEvents?: Record<string, string>;
   onCreate: (settings: MediaLibrarySettingsInput) => Promise<MediaLibraryDto>;
   /** Opens the workbench ready to read the library's directory into the index. */
   onImport: (library: MediaLibraryDto) => void;
@@ -29,6 +31,7 @@ export interface LibrariesViewProps {
   onPreviewNaming: (settings: MediaLibrarySettingsInput) => Promise<NamingPreviewItem[]>;
   loadDirectorySuggestions?: (path: string) => Promise<PathAutocompleteResult>;
   browseDirectory?: () => Promise<string | null>;
+  probeStubs?: (sourcePath: string) => Promise<boolean>;
 }
 
 export function LibrariesView({
@@ -38,6 +41,7 @@ export function LibrariesView({
   showAutomation,
   summaries = {},
   pendingCounts = {},
+  cloudDriveEvents = {},
   onCreate,
   onImport,
   onViewIssue,
@@ -47,6 +51,7 @@ export function LibrariesView({
   onPreviewNaming,
   loadDirectorySuggestions,
   browseDirectory,
+  probeStubs,
 }: LibrariesViewProps) {
   const t = useT();
   const [editing, setEditing] = useState<MediaLibraryDto | null>(null);
@@ -135,6 +140,13 @@ export function LibrariesView({
                   <PathLine icon={<FolderOutput className="h-3.5 w-3.5" />} label={t.libraries.card.output}>
                     {library.placement === "inPlace" ? t.libraries.card.noOutput : library.outputPath}
                   </PathLine>
+                  {showAutomation && library.automation !== "off" && library.discovery === "clouddrive" ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t.libraries.card.cloudDriveLastEvent(
+                        cloudDriveEvents[library.id] ? new Date(cloudDriveEvents[library.id]).toLocaleString() : null,
+                      )}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <Button variant="outline" size="sm" onClick={() => openEditor(library)}>
@@ -187,6 +199,7 @@ export function LibrariesView({
         onPreviewNaming={onPreviewNaming}
         loadDirectorySuggestions={loadDirectorySuggestions}
         browseDirectory={browseDirectory}
+        probeStubs={probeStubs}
       />
     </main>
   );

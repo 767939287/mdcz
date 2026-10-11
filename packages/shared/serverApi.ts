@@ -5,6 +5,8 @@ import type {
   MediaLibraryIdInput,
   MediaLibraryListResponse,
   MediaLibrarySettingsInput,
+  MediaLibrarySourceInput,
+  MediaLibraryStubProbeResponse,
   MediaLibraryUpdateInput,
 } from "./mediaLibrary";
 import type {
@@ -38,6 +40,7 @@ import type {
   FileActionInput,
   FileActionResponse,
   HealthResponse,
+  IntegrationStatusResponse,
   LibraryAvailabilityInput,
   LibraryAvailabilityResponse,
   LibraryDetailInput,
@@ -187,6 +190,7 @@ export interface ServerApiContract {
     update(input: MediaLibraryUpdateInput): Promise<MediaLibraryDto>;
     delete(input: MediaLibraryIdInput): Promise<{ success: true }>;
     previewNaming(input: MediaLibrarySettingsInput): Promise<{ items: NamingPreviewItem[] }>;
+    probeStubs(input: MediaLibrarySourceInput): Promise<MediaLibraryStubProbeResponse>;
   };
   pending: {
     list(): Promise<PendingListResponse>;
@@ -202,6 +206,9 @@ export interface ServerApiContract {
   };
   notifications: {
     test(input: NotificationTestInputDto): Promise<{ success: true }>;
+  };
+  integrations: {
+    status(): Promise<IntegrationStatusResponse>;
   };
   mediaRoots: {
     ensurePath(input: MediaRootEnsurePathInput): Promise<MediaRootEnsurePathResponse>;

@@ -6,6 +6,7 @@ import { ACTIVE_MAINTENANCE_STATUSES } from "@mdcz/runtime/maintenance";
 import { createDirectoryScope, discoverDirectoryFiles } from "@mdcz/runtime/scrape";
 import { cloudPathCovers, normalizeCloudPath } from "@mdcz/shared/mediaLibrary";
 import type { RootFileRef } from "@mdcz/shared/mediaRef";
+import type { IntegrationStatusResponse } from "@mdcz/shared/serverDtos";
 import type { ServerConfigService } from "./configService";
 import type { MaintenanceService } from "./maintenanceService";
 import type { MediaRootService } from "./mediaRootService";
@@ -297,6 +298,9 @@ export class LibraryWatchService {
   private refreshing: Promise<void> = Promise.resolve();
   private closed = false;
   private readonly inFlight: InFlightSources;
+  // A misconfigured CloudDrive2 webhook fails silently; these times make it visible. Kept in memory only.
+  private cloudDriveLastEventAt: string | null = null;
+  private readonly cloudDriveLibraryEvents = new Map<string, string>();
 
   constructor(private readonly deps: WatchDependencies) {
     this.inFlight = new InFlightSources(async (taskId) =>
@@ -335,6 +339,8 @@ export class LibraryWatchService {
    * directory the change touched, after a pause so CloudDrive's directory cache lists the new files.
    */
   submitCloudDriveChanges(changes: readonly CloudDriveChange[]): void {
+    const receivedAt = new Date().toISOString();
+    this.cloudDriveLastEventAt = receivedAt;
     const routes = [...this.watchers.values()]
       .filter((watcher) => watcher.library.discovery === "clouddrive")
       .map((watcher) => ({ watcher, cloudPath: normalizeCloudPath(watcher.library.cloudPath) }))
@@ -350,6 +356,7 @@ export class LibraryWatchService {
         }
         const route = routes.find((candidate) => cloudPathCovers(candidate.cloudPath, normalized));
         if (!route) continue;
+        this.cloudDriveLibraryEvents.set(route.watcher.library.id, receivedAt);
         const relative = normalized.slice(route.cloudPath.length).split("/").filter(Boolean);
         const local = path.join(route.watcher.library.sourcePath, ...relative);
         // A deleted or renamed-away path no longer exists; scanning its parent records the removal.
@@ -363,6 +370,10 @@ export class LibraryWatchService {
         );
       }
     }
+  }
+
+  cloudDriveActivity(): IntegrationStatusResponse["cloudDrive"] {
+    return { lastEventAt: this.cloudDriveLastEventAt, libraries: Object.fromEntries(this.cloudDriveLibraryEvents) };
   }
 
   /**

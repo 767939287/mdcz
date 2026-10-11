@@ -792,6 +792,11 @@ describe("buildServer composition integration", () => {
       url: "/api/automation/library/recent?limit=1",
       headers: automation,
     });
+    const silentCloudDrive = await fastify.inject({
+      method: "GET",
+      url: "/trpc/integrations.status",
+      headers: { authorization: `Bearer ${token}` },
+    });
     const cloudDrive = await fastify.inject({
       method: "POST",
       url: "/api/webhooks/clouddrive",
@@ -804,6 +809,11 @@ describe("buildServer composition integration", () => {
         event_name: "notify",
         data: [],
       },
+    });
+    const reachedCloudDrive = await fastify.inject({
+      method: "GET",
+      url: "/trpc/integrations.status",
+      headers: { authorization: `Bearer ${token}` },
     });
     // An API key reaches only the automation endpoints, and stops working once revoked.
     const keyOnSettings = await fastify.inject({ method: "GET", url: "/trpc/config.read", headers: automation });
@@ -822,9 +832,95 @@ describe("buildServer composition integration", () => {
     expect(recentResponse.json().tasks[0]).toMatchObject({ taskId, kind: "scrape", status: "completed" });
     expect(recentResponse.json().tasks[0].completedAt).toEqual(expect.any(String));
     expect(cloudDrive.statusCode).toBe(204);
+    expect(silentCloudDrive.json().result.data.cloudDrive.lastEventAt).toBeNull();
+    expect(reachedCloudDrive.json().result.data.cloudDrive.lastEventAt).toEqual(expect.any(String));
     expect(keyOnSettings.statusCode).toBe(401);
     expect(revoked.statusCode).toBe(401);
   });
+  it("polls a qBittorrent category and scrapes each torrent that finished after polling began, once", async () => {
+    const root = await createTempRoot("qbittorrent-root");
+    const outside = await createTempRoot("qbittorrent-outside");
+    await writeFile(join(root, "ABC-123.mp4"), "video");
+    await writeFile(join(root, "OLD-001.mp4"), "video");
+    const finishedAt = Math.floor(Date.now() / 1000) + 3600;
+    const requests: string[] = [];
+    const qbittorrent = await startLocalHttpServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://qbittorrent.test");
+      requests.push(url.pathname);
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        if (url.pathname === "/api/v2/auth/login") {
+          const form = new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+          const accepted = form.get("username") === "admin" && form.get("password") === "secret";
+          response.writeHead(200, accepted ? { "set-cookie": "SID=session; HttpOnly; path=/" } : {});
+          response.end(accepted ? "Ok." : "Fails.");
+          return;
+        }
+        if (request.headers.cookie !== "SID=session") {
+          response.writeHead(403);
+          response.end("Forbidden");
+          return;
+        }
+        const body =
+          url.pathname === "/api/v2/torrents/categories"
+            ? { jav: { name: "jav", savePath: root } }
+            : url.searchParams.get("filter") === "completed" && url.searchParams.get("category") === "jav"
+              ? [
+                  // Finished before polling began: already there when qBittorrent was connected.
+                  { hash: "old", name: "OLD-001", content_path: join(root, "OLD-001.mp4"), completion_on: 1 },
+                  { hash: "new", name: "ABC-123", content_path: join(root, "ABC-123.mp4"), completion_on: finishedAt },
+                  {
+                    hash: "stray",
+                    name: "Elsewhere",
+                    content_path: join(outside, "XYZ-999.mp4"),
+                    completion_on: finishedAt,
+                  },
+                ]
+              : [];
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(body));
+      });
+    });
+    const image = await startTestImageServer();
+    const { fastify, services } = await createTestServer({
+      scrapeAggregation: createTestAggregation(`${image.url}/cover.png`),
+    });
+    const token = await loginAsAdmin(fastify);
+    await createTestLibrary(fastify, token, root, { placement: "hardlink" });
+    const qbittorrentStatus = async () =>
+      (
+        await fastify.inject({
+          method: "GET",
+          url: "/trpc/integrations.status",
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).json().result.data.qbittorrent;
+    const polls = () => requests.filter((pathname) => pathname === "/api/v2/torrents/info").length;
+
+    await services.config.update({
+      automation: { qbittorrent: { url: qbittorrent.url, username: "admin", password: "secret", category: "jav" } },
+    });
+    await expect.poll(qbittorrentStatus).toMatchObject({
+      configured: true,
+      error: null,
+      library: { name: "Library", placement: "hardlink" },
+      failures: [{ name: "Elsewhere", error: expect.stringContaining("No library's source directory contains") }],
+    });
+    await expect
+      .poll(async () => (await services.activity.list()).entries.map(({ kind, status }) => ({ kind, status })))
+      .toEqual([{ kind: "scrape", status: "completed" }]);
+    const pollsBefore = polls();
+    // Any settings change polls at once; a handled torrent is not taken again.
+    await services.config.update({ automation: { qbittorrent: { category: "jav" } } });
+    await expect.poll(polls).toBeGreaterThan(pollsBefore);
+    await expect.poll(qbittorrentStatus).toMatchObject({ error: null, failures: [{ name: "Elsewhere" }] });
+
+    expect((await services.activity.list()).entries).toHaveLength(1);
+    expect(requests.filter((pathname) => pathname === "/api/v2/auth/login")).toHaveLength(1);
+    expect((await services.library.list()).entries.map((entry) => entry.number)).toEqual(["ABC-123"]);
+  });
+
   it("delivers outbound automation webhooks when task updates are published", async () => {
     const webhook = await startWebhookServer();
     const root = await createTempRoot("outbound-webhook-root");

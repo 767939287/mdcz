@@ -40,6 +40,7 @@ import { buildMovieTags } from "../maintenance/movieTags";
 import type { NetworkClient } from "../network";
 import { toCommittedMovie } from "../publication/committedMovie";
 import { MoveOutput } from "../publication/MoveOutput";
+import { assertSymlinkSupport } from "../publication/outputFileSystem";
 import { movieOutputResultAssets } from "../publication/outputLibrary";
 import { acquireOutputDirectories } from "../publication/outputMutex";
 import { toRootFileRef } from "../publication/outputRefs";
@@ -542,6 +543,7 @@ export class ScrapeRunner {
   ): Promise<{ outputRootId: string; outputRelativeDirectory: string | null }> {
     if (library.placement === "inPlace") return { outputRootId: sourceRootId, outputRelativeDirectory: null };
     const output = await this.deps.persistence.mediaRoots.prepareOutputDirectory({ hostPath: library.outputPath });
+    if (library.placement === "symlink") await assertSymlinkSupport(library.outputPath);
     return { outputRootId: output.id, outputRelativeDirectory: output.relativeDirectory || null };
   }
 

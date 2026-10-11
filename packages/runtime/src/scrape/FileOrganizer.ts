@@ -16,7 +16,7 @@ import {
 import { getNfoWritePaths } from "./nfo";
 import { NAMING_PREVIEW_SAMPLES, NamingEngine } from "./organize/NamingEngine";
 import { parseFileInfo } from "./utils/number";
-import { prepareMovedStrmContent } from "./utils/strm";
+import { isStrmFile, prepareMovedStrmContent } from "./utils/strm";
 
 /** How a placed video reaches its target; the source stays on disk for `hardlink` and `copy`. */
 export type MediaTransfer = "move" | "hardlink" | "copy";
@@ -138,6 +138,9 @@ export class FileOrganizer {
       };
     }
 
+    if (target.placement === "strm" && isStrmFile(fileInfo.filePath)) {
+      throw new Error("A .strm source is already a link; use a library that places files in place or moves them");
+    }
     if (isPathInside(sourceDir, outputRoot) || isPathInside(outputRoot, sourceDir)) {
       throw new Error("The library output directory cannot be the same as or contain the video's directory");
     }

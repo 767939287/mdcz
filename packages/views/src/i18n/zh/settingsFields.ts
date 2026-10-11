@@ -357,6 +357,25 @@ export const settingsFields: Messages["settingsFields"] = {
       description: "下载器运行在其他容器或主机时，把它报告的路径换成 MDCz 能访问的路径；按最长前缀匹配。",
       aliases: ["远程路径", "Docker"],
     },
+    "automation.qbittorrent.url": {
+      label: "qBittorrent WebUI 地址",
+      description: "例如 http://qbittorrent:8080。留空则停止轮询。",
+      aliases: ["下载器", "种子"],
+    },
+    "automation.qbittorrent.apiKey": {
+      label: "qBittorrent API Key",
+      description: "qBittorrent 5.2 及以上可用，优先于用户名和密码。",
+    },
+    "automation.qbittorrent.username": {
+      label: "qBittorrent 用户名",
+      description: "用于旧版本。若 qBittorrent 对 MDCz 所在地址免认证，可留空。",
+    },
+    "automation.qbittorrent.password": { label: "qBittorrent 密码" },
+    "automation.qbittorrent.category": {
+      label: "分类",
+      description:
+        "MDCz 只接收该分类中已完成的种子。分类的保存路径需位于某个媒体库的源目录内，且不能在开启了下载器监控的 MoviePilot 下载目录中。",
+    },
     "notifications.webhookUrl": { label: "Webhook 地址", description: "以 JSON 接收每个任务的开始与结束。" },
     "notifications.webhookSecret": { label: "Webhook 密钥", description: "通过 x-mdcz-webhook-secret 请求头发送。" },
     "notifications.channels": {

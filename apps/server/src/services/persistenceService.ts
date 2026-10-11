@@ -1,6 +1,7 @@
 import {
   CredentialRepository,
   createPersistenceDatabase,
+  DownloaderRepository,
   isSchemaMigrationFailure,
   LibraryRepository,
   MediaLibraryRepository,
@@ -20,6 +21,7 @@ import type { ServerRuntimePaths } from "./configService";
 
 export interface ServerPersistenceRepositories {
   credentials: CredentialRepository;
+  downloaders: DownloaderRepository;
   library: LibraryRepository;
   mediaLibraries: MediaLibraryRepository;
   mediaRoots: MediaRootRepository;
@@ -81,6 +83,7 @@ export class ServerPersistenceService {
         database,
         repositories: {
           credentials: new CredentialRepository(database),
+          downloaders: new DownloaderRepository(database),
           library: new LibraryRepository(database),
           mediaLibraries: new MediaLibraryRepository(database),
           mediaRoots,

@@ -15,6 +15,7 @@ import {
 import type { NamingPreviewItem } from "@mdcz/shared/types";
 import { z } from "zod";
 import type { LegacyConfigurationConversion } from "../config/legacyLibrary";
+import { assertSymlinkSupport } from "../publication/outputFileSystem";
 import { assertTargetLayout, FileOrganizer } from "../scrape/FileOrganizer";
 import type { ConfiguredMediaRootService } from "./mediaRootService";
 
@@ -116,6 +117,7 @@ export class MediaLibraryService {
     await this.mediaRoots.ensurePathRecord({ hostPath: settings.sourcePath });
     if (settings.placement !== "inPlace")
       await this.mediaRoots.prepareOutputDirectory({ hostPath: settings.outputPath });
+    if (settings.placement === "symlink") await assertSymlinkSupport(settings.outputPath);
     return {
       ...settings,
       outputPath: settings.placement === "inPlace" ? "" : settings.outputPath,

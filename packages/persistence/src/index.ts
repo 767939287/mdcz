@@ -1,5 +1,6 @@
 export * from "./credentialRepository";
 export * from "./database";
+export * from "./downloaderRepository";
 export * from "./errors";
 export * from "./libraryRepository";
 export * from "./mediaLibraryRepository";

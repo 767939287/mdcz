@@ -80,6 +80,7 @@ export const ipc = {
     update: (id: string, settings: MediaLibrarySettingsInput) => client[IpcChannel.Libraries_Update]({ id, settings }),
     delete: (id: string) => client[IpcChannel.Libraries_Delete]({ id }),
     previewNaming: (settings: MediaLibrarySettingsInput) => client[IpcChannel.Libraries_PreviewNaming](settings),
+    probeStubs: (sourcePath: string) => client[IpcChannel.Libraries_ProbeStubs]({ sourcePath }),
   },
   pending: {
     list: () => client[IpcChannel.Pending_List](undefined),

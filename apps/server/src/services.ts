@@ -9,6 +9,7 @@ import type { LibraryWatchService } from "./services/libraryWatchService";
 import type { MaintenanceService } from "./services/maintenanceService";
 import type { MediaRootService } from "./services/mediaRootService";
 import type { ServerPersistenceService } from "./services/persistenceService";
+import type { QbittorrentService } from "./services/qbittorrentService";
 import type { RuntimeActionService } from "./services/runtimeActionService";
 import type { RuntimeLogService } from "./services/runtimeLogService";
 import type { ScanQueueService } from "./services/scanQueueService";
@@ -31,6 +32,7 @@ export interface ServerServices {
   mediaRoots: MediaRootService;
   pending: PendingService;
   persistence: ServerPersistenceService;
+  qbittorrent: QbittorrentService;
   runtimeLogs: RuntimeLogService;
   runtimeActions: RuntimeActionService;
   scans: ScanQueueService;

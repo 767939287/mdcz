@@ -157,6 +157,10 @@ export type MediaLibraryUpdateInput = z.input<typeof mediaLibraryUpdateInputSche
 export const mediaLibraryListResponseSchema = z.object({ libraries: z.array(mediaLibraryDtoSchema) });
 export type MediaLibraryListResponse = z.infer<typeof mediaLibraryListResponseSchema>;
 
+export const mediaLibrarySourceInputSchema = z.object({ sourcePath: z.string().trim().min(1) });
+export type MediaLibrarySourceInput = z.infer<typeof mediaLibrarySourceInputSchema>;
+export type MediaLibraryStubProbeResponse = { hasStubs: boolean };
+
 /** The publication side of a library: where and how one scrape run writes its output. */
 export type PublicationTarget = Pick<
   MediaLibrarySettings,

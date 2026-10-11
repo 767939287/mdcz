@@ -31,7 +31,7 @@ import {
   Switch,
 } from "@mdcz/ui";
 import { CircleHelp, FolderOpen, Loader2, RotateCcw, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { FieldValues } from "react-hook-form";
 import { useFormContext, useWatch } from "react-hook-form";
 import {
@@ -843,6 +843,20 @@ export function NotificationsSection() {
       ) : null}
       <BoolField name="notifications.dailyDigest" />
       <NumberField name="notifications.digestHour" min={0} max={23} />
+    </>
+  );
+}
+
+/** qBittorrent polling; the status line shows whether the settings as saved actually work. */
+export function QbittorrentSection({ status }: { status: ReactNode }) {
+  return (
+    <>
+      <UrlField name="automation.qbittorrent.url" placeholder="http://qbittorrent:8080" />
+      <SecretField name="automation.qbittorrent.apiKey" />
+      <TextField name="automation.qbittorrent.username" />
+      <SecretField name="automation.qbittorrent.password" />
+      <TextField name="automation.qbittorrent.category" />
+      {status}
     </>
   );
 }

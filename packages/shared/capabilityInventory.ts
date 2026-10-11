@@ -190,6 +190,7 @@ export const CROSS_HOST_CAPABILITIES = [
   { desktop: IpcChannel.Libraries_Update, server: "libraries.update", status: "aligned" },
   { desktop: IpcChannel.Libraries_Delete, server: "libraries.delete", status: "aligned" },
   { desktop: IpcChannel.Libraries_PreviewNaming, server: "libraries.previewNaming", status: "aligned" },
+  { desktop: IpcChannel.Libraries_ProbeStubs, server: "libraries.probeStubs", status: "aligned" },
   { desktop: IpcChannel.Pending_List, server: "pending.list", status: "aligned" },
   { desktop: IpcChannel.Pending_Detail, server: "pending.detail", status: "aligned" },
   { desktop: IpcChannel.Pending_Retry, server: "pending.retry", status: "aligned" },
@@ -358,6 +359,7 @@ export const SERVER_ONLY_PROCEDURES = [
   { path: "apiKeys.create", reason: "Downloader callbacks reach only the server." },
   { path: "apiKeys.delete", reason: "Downloader callbacks reach only the server." },
   { path: "notifications.test", reason: "Outbound notifications are sent by the server." },
+  { path: "integrations.status", reason: "Downloader polling and cloud drive webhooks run only on the server." },
   { path: "browser.list", reason: "Media-root scoped browser; desktop File_Browse is local native dialog." },
   {
     path: "config.export",
