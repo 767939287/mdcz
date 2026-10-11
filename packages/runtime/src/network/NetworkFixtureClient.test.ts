@@ -200,6 +200,29 @@ describe("network fixtures", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("sends media servers on this machine or LAN live in either mode without recording them", async () => {
+    fetchMock.mockImplementation(async () => new Response(null, { status: 204 }));
+    const root = await createRoot();
+    const local = [
+      "http://127.0.0.1:8096/Library/Media/Updated",
+      "http://localhost:8096/Library/Media/Updated",
+      "http://192.168.1.5:8096/Library/Media/Updated",
+      "http://[::1]:8096/Library/Media/Updated",
+    ];
+    for (const mode of ["record", "replay"] as const) {
+      const client = createClient(root, mode);
+      for (const url of local) {
+        await client.postText(url, "{}");
+        await runWithScrapeItem(scrape(), async () => await client.postText(url, "{}"));
+      }
+      expect(await client.save()).toEqual([]);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(local.length * 4);
+    await expect(
+      createClient(root, "replay").postText("https://emby.example.com/Library/Media/Updated", "{}"),
+    ).rejects.toThrow("public network fallback is disabled");
+  });
+
   it("redacts credentials before saving", async () => {
     const cookie = "super-secret-session";
     const token = "query-token-abcdef";
