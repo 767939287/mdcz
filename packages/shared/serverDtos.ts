@@ -442,6 +442,7 @@ export const scrapeHistoryRunSchema = z.object({
   id: z.string(),
   rootId: z.string(),
   rootDisplayName: z.string(),
+  libraryId: z.string().nullable(),
   requestedOutputRootId: z.string().nullable(),
   outputRootId: z.string().nullable(),
   executionMode: z.enum(["single", "batch"]),
@@ -792,8 +793,6 @@ export type OverviewRecentAcquisitionDto = z.infer<typeof overviewRecentAcquisit
 export const overviewOutputSummarySchema = z.object({
   fileCount: z.number(),
   totalBytes: z.number(),
-  outputAt: z.string().nullable(),
-  rootPath: z.string().nullable(),
 });
 
 export type OverviewOutputSummaryDto = z.infer<typeof overviewOutputSummarySchema>;

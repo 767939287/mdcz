@@ -52,6 +52,7 @@ export const workbench: Messages["workbench"] = {
   inaccessiblePathsWarning: (count: number) => `部分路径无法访问，已跳过 ${count} 项`,
   selectVisibleFilesAriaLabel: "选择当前可见文件",
   refreshFiles: "刷新文件",
+  alreadyInLibrary: "已在库中",
   selectedOfTotalFiles: (selected: number, total: number) => `已选 ${selected} / ${total} 个文件`,
   searchFilesAriaLabel: "搜索文件",
   searchFilesPlaceholder: "搜索文件...",

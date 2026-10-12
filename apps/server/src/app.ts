@@ -170,7 +170,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       logger: runtimeLogs.getLogger("LibraryWatch"),
       onPending: notePending,
     });
-  const activity = options.services?.activity ?? new ActivityService({ scans, scrape, maintenance });
+  const activity = options.services?.activity ?? new ActivityService({ libraries, scans, scrape, maintenance });
   const automation: AutomationService =
     options.services?.automation ??
     new AutomationService({

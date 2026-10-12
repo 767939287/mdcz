@@ -6,7 +6,6 @@ export const overview = {
     description:
       "Open the workbench to extract metadata. Current output overview will stay updated once scraping finishes.",
     loadFailed: "Failed to load",
-    waitingFirstScrape: "Waiting for first scrape",
     notConfigured: "Not configured",
     files: "Files",
     size: "Size",

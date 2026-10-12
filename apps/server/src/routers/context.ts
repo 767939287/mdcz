@@ -1,3 +1,4 @@
+import { PersistenceError, persistenceErrorCodes } from "@mdcz/persistence";
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { ServerServices } from "../services";
 import { ServerConfigValidationError } from "../services/configService";
@@ -8,6 +9,8 @@ export interface RouterContext {
 }
 
 export const t = initTRPC.context<RouterContext>().create({
+  // A build run without NODE_ENV must not send stack traces to clients.
+  isDev: process.env.NODE_ENV === "development",
   errorFormatter: ({ shape, error }) => ({
     ...shape,
     data: {
@@ -26,7 +29,11 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
       message: error instanceof Error ? error.message : "Authentication required",
     });
   }
-  return next({ ctx });
+  const result = await next({ ctx });
+  const cause = result.ok ? undefined : result.error.cause;
+  if (cause instanceof PersistenceError && cause.code === persistenceErrorCodes.NotFound)
+    throw new TRPCError({ code: "NOT_FOUND", message: cause.message, cause });
+  return result;
 });
 
 export const mapConfigError = (error: unknown): never => {

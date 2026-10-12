@@ -3,6 +3,7 @@ import type { LibraryEntryDto, LibraryHealthIssue } from "@mdcz/shared/serverDto
 import type { MaintenancePresetId } from "@mdcz/shared/types";
 import {
   changeMaintenancePreset,
+  resetMaintenanceSession,
   selectMaintenanceHasWork,
   useMaintenanceStore,
 } from "@mdcz/views/state/maintenanceStore";
@@ -122,6 +123,29 @@ export const resetScrapeWorkbenchToSetup = (): void => {
   useUIStore.getState().setSelectedResultId(null);
   useWorkbenchTaskStore.getState().reset();
   useScrapeStore.getState().reset();
+};
+
+/**
+ * Starting a task from Overview is a deliberate new start: a finished or stopped result makes way for the setup,
+ * while running work and a preview still waiting for review stay open.
+ */
+export const openNewWorkbenchTask = async (
+  mode: WorkbenchMode,
+  discardMaintenanceSession: () => Promise<void>,
+): Promise<void> => {
+  if (selectIsScraping(useScrapeStore.getState())) return;
+  const { snapshot, pending } = useMaintenanceStore.getState();
+  const finished =
+    snapshot !== null &&
+    (["failed", "stopped", "interrupted"].includes(snapshot.status) ||
+      (snapshot.status === "completed" && snapshot.phase === "apply"));
+  if (pending || (snapshot && !finished)) return;
+  if (snapshot) {
+    await discardMaintenanceSession();
+    resetMaintenanceSession();
+  }
+  if (useScrapeStore.getState().snapshot) resetScrapeWorkbenchToSetup();
+  useUIStore.getState().setWorkbenchMode(mode);
 };
 
 /** Points the workbench setup at a directory and preset; the setup then scans the directory by itself. */

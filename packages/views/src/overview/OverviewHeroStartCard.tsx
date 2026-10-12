@@ -8,7 +8,6 @@ export interface OverviewHeroStartCardProps {
   data?: {
     fileCount: number;
     totalBytes: number;
-    rootPath: string | null;
   } | null;
   hasConfiguredOutput?: boolean;
   isError?: boolean;
@@ -34,8 +33,7 @@ export function OverviewHeroStartCard({
   const t = useT();
   const startAction = labels?.startAction ?? t.overview.hero.startAction;
   const setupAction = labels?.setupAction ?? t.overview.hero.setupAction;
-  const hasOutputRoot = Boolean(data?.rootPath);
-  const canStart = isLoading || isError || hasOutputRoot || hasConfiguredOutput;
+  const canStart = isLoading || isError || hasConfiguredOutput;
 
   return (
     <section
@@ -68,18 +66,13 @@ export function OverviewHeroStartCard({
               <MetricBlock label={t.overview.hero.files} value="-" />
               <MetricBlock label={t.overview.hero.size} value={t.overview.hero.loadFailed} />
             </>
-          ) : hasOutputRoot ? (
+          ) : hasConfiguredOutput ? (
             <>
               <MetricBlock label={t.overview.hero.files} value={data?.fileCount ?? 0} />
               <MetricBlock
                 label={t.overview.hero.size}
                 value={formatBytes(data?.totalBytes ?? 0, { fractionDigits: 2, trimTrailingZeros: true })}
               />
-            </>
-          ) : hasConfiguredOutput ? (
-            <>
-              <MetricBlock label={t.overview.hero.files} value={0} />
-              <MetricBlock label={t.overview.hero.size} value={t.overview.hero.waitingFirstScrape} />
             </>
           ) : (
             <>

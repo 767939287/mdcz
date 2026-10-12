@@ -360,6 +360,7 @@ export class ScrapeRunner {
         id: manifest.id,
         rootId: manifest.rootId,
         rootDisplayName: root.displayName,
+        libraryId: manifest.libraryId,
         requestedOutputRootId: manifest.requestedOutputRootId,
         outputRootId: manifest.requestedOutputRootId,
         executionMode: manifest.executionMode,

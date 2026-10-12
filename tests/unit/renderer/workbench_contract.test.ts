@@ -17,6 +17,7 @@ const createCandidate = (path: string): MediaCandidate => ({
   lastModified: null,
   extension: ".mp4",
   ref: { rootId: "test-root", relativePath: path.split(/[\\/]+/u).at(-1) ?? path },
+  inLibrary: false,
 });
 
 const resetWorkbenchSetupStore = () => {

@@ -10,7 +10,7 @@ describe("web overview output state", () => {
     expect(
       hasWorkbenchOutput({
         libraryCount,
-        output: { fileCount: 0, totalBytes: 0, rootPath: null },
+        output: { fileCount: 0, totalBytes: 0 },
         recentCount: 0,
       }),
     ).toBe(libraryCount > 0);

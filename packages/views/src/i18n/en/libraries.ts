@@ -35,6 +35,7 @@ export const libraries = {
     name: "Name",
     sourcePath: "Source directory",
     sourcePathHint: "Where new videos arrive, for example the download directory or a cloud drive mount.",
+    importSourcePathHint: "The directory that already holds your videos and NFOs.",
     outputPath: "Output directory",
     outputPathHint: "Where finished movies and their metadata go. Point your media server at this directory.",
     placement: "Placement",

@@ -189,6 +189,8 @@ export interface MediaCandidate {
   lastModified: string | null;
   extension: string;
   ref: RootFileRef;
+  /** Already in the library, or the source of a hardlinked or copied library file. */
+  inLibrary: boolean;
 }
 
 export interface IpcError {

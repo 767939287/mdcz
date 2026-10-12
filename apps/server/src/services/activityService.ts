@@ -1,3 +1,4 @@
+import type { MediaLibraryService } from "@mdcz/runtime/library";
 import type { ActivityEntryDto, ActivityListResponse } from "@mdcz/shared/serverDtos";
 import type { MaintenanceService } from "./maintenanceService";
 import type { ScanQueueService } from "./scanQueueService";
@@ -13,6 +14,7 @@ const durationBetween = (startedAt: string | null, completedAt: string | null): 
 export class ActivityService {
   constructor(
     private readonly deps: {
+      libraries: Pick<MediaLibraryService, "list">;
       scans: Pick<ScanQueueService, "list">;
       scrape: Pick<ScrapeService, "history" | "liveRuns">;
       maintenance: Pick<MaintenanceService, "automationTask">;
@@ -20,19 +22,21 @@ export class ActivityService {
   ) {}
 
   async list(limit = 20): Promise<ActivityListResponse> {
-    const [scanTasks, scrapeHistory, liveRuns, maintenanceTask] = await Promise.all([
+    const [libraries, scanTasks, scrapeHistory, liveRuns, maintenanceTask] = await Promise.all([
+      this.deps.libraries.list(),
       this.deps.scans.list(),
       this.deps.scrape.history(),
       this.deps.scrape.liveRuns(),
       this.deps.maintenance.automationTask(),
     ]);
     const liveRunIds = new Set(liveRuns.runs.map(({ task }) => task.id));
+    const libraryNames = new Map(libraries.map((library) => [library.id, library.name]));
     const entries: ActivityEntryDto[] = [
       ...liveRuns.runs.map(({ task }) => ({
         id: task.id,
         kind: "scrape" as const,
         status: task.status,
-        target: task.rootDisplayName || task.rootId,
+        target: (task.libraryId && libraryNames.get(task.libraryId)) || task.rootDisplayName || task.rootId,
         updatedAt: task.updatedAt,
         startedAt: task.startedAt,
         completedAt: task.completedAt,
@@ -58,7 +62,7 @@ export class ActivityService {
           id: run.id,
           kind: "scrape" as const,
           status: run.disposition,
-          target: run.rootDisplayName || run.rootId,
+          target: (run.libraryId && libraryNames.get(run.libraryId)) || run.rootDisplayName || run.rootId,
           updatedAt: run.completedAt ?? run.createdAt,
           startedAt: run.startedAt,
           completedAt: run.completedAt,

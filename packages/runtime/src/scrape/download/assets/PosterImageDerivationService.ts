@@ -9,7 +9,7 @@ const SMALL_POSTER_THRESHOLD_BYTES = 50_000;
 
 export type PosterDerivationResult =
   | { status: "derived"; path: string }
-  | { status: "skipped"; reason: "large_poster" | "missing_thumb" | "portrait_thumb" | "unreadable_poster" };
+  | { status: "skipped"; reason: "large_poster" | "missing_thumb" | "unreadable_poster" };
 
 interface PosterDerivationLogger {
   warn(message: string): void;
@@ -67,10 +67,8 @@ export class PosterImageDerivationService {
         throw new Error(`Unable to read thumb dimensions for ${options.thumbPath}`);
       }
 
+      // A portrait cover is already poster-shaped and is used whole.
       const cropRegion = resolveThumbToPosterCropRegion(width, height);
-      if (!cropRegion) {
-        return { status: "skipped", reason: "portrait_thumb" };
-      }
 
       const parsedPath = parse(outputPath);
       const tempPath = join(
@@ -80,7 +78,7 @@ export class PosterImageDerivationService {
       await mkdir(dirname(tempPath), { recursive: true });
 
       try {
-        await encodePoster(source.extract(cropRegion), outputPath).toFile(tempPath);
+        await encodePoster(cropRegion ? source.extract(cropRegion) : source, outputPath).toFile(tempPath);
         await rename(tempPath, outputPath);
       } finally {
         await unlink(tempPath).catch(() => undefined);

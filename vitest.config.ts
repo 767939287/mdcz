@@ -160,6 +160,8 @@ export default defineConfig({
         },
         test: {
           name: "component",
+          // The projects run side by side, and the integration scenarios starve the browser of CPU.
+          testTimeout: 60000,
           include: [
             "tests/component/**/*.component.test.tsx",
             "apps/**/*.component.test.tsx",

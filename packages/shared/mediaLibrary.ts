@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { localPathStyle } from "./localPath";
+import { isAbsoluteHostPath } from "./mediaCandidate";
 
 /**
  * How a scraped video reaches the output directory.
@@ -157,7 +158,9 @@ export type MediaLibraryUpdateInput = z.input<typeof mediaLibraryUpdateInputSche
 export const mediaLibraryListResponseSchema = z.object({ libraries: z.array(mediaLibraryDtoSchema) });
 export type MediaLibraryListResponse = z.infer<typeof mediaLibraryListResponseSchema>;
 
-export const mediaLibrarySourceInputSchema = z.object({ sourcePath: z.string().trim().min(1) });
+export const mediaLibrarySourceInputSchema = z.object({
+  sourcePath: z.string().trim().min(1).refine(isAbsoluteHostPath),
+});
 export type MediaLibrarySourceInput = z.infer<typeof mediaLibrarySourceInputSchema>;
 export type MediaLibraryStubProbeResponse = { hasStubs: boolean };
 

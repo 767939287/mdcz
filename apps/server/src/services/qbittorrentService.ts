@@ -69,6 +69,11 @@ export class QbittorrentService {
     await this.#polling;
   }
 
+  /** Polls again now, e.g. after the libraries changed under the category's save path. */
+  refresh(): void {
+    this.schedule(0);
+  }
+
   status(): QbittorrentStatus {
     return this.#status;
   }

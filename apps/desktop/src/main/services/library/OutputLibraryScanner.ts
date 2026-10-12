@@ -4,7 +4,6 @@ import { toErrorMessage } from "@main/utils/common";
 import {
   createEmptyOutputLibrarySummary,
   createOutputLibrarySummaryFromEntries,
-  createOutputLibrarySummaryFromScrapeOutput,
   type RuntimeOutputLibrarySummary,
   toRuntimeLibraryEntrySummaryInput,
 } from "@mdcz/runtime/library";
@@ -68,22 +67,6 @@ export class OutputLibraryScanner {
 
     try {
       const state = await this.persistenceService.getState();
-      const latestRun = await state.repositories.scrapeRuns.getLatestFinalized();
-      const latestSummary = latestRun ? state.repositories.scrapeRuns.summary(latestRun) : null;
-      if (latestSummary) {
-        const outputRoot = latestSummary.outputRootId
-          ? await state.repositories.mediaRoots.get(latestSummary.outputRootId)
-          : null;
-        return createOutputLibrarySummaryFromScrapeOutput(
-          {
-            fileCount: latestSummary.successCount,
-            totalBytes: latestSummary.totalBytes,
-            completedAt: latestSummary.completedAt,
-            outputDirectory: outputRoot?.hostPath ?? null,
-          },
-          scannedAt,
-        );
-      }
       const entries = await state.repositories.library.listEntries();
       return createOutputLibrarySummaryFromEntries(entries.map(toRuntimeLibraryEntrySummaryInput), scannedAt);
     } catch (error) {

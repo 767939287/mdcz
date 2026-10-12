@@ -33,6 +33,7 @@ export const libraries: Messages["libraries"] = {
     name: "名称",
     sourcePath: "来源目录",
     sourcePathHint: "新视频到达的位置，例如下载目录或网盘挂载目录。",
+    importSourcePathHint: "已经存放视频和 NFO 的目录。",
     outputPath: "输出目录",
     outputPathHint: "整理好的影片及元数据存放的位置，媒体服务器指向这个目录。",
     placement: "放置方式",

@@ -52,6 +52,8 @@ export const toMediaLibraryDto = (record: MediaLibraryRecord): MediaLibraryDto =
 
 const preview = new FileOrganizer();
 
+export class MediaLibrarySettingsError extends Error {}
+
 export class MediaLibraryService {
   constructor(
     private readonly repository: () => Promise<MediaLibraryRepository>,
@@ -111,7 +113,7 @@ export class MediaLibraryService {
     for (const other of await this.list()) {
       if (other.id === id) continue;
       if (isPathInside(other.sourcePath, settings.sourcePath) || isPathInside(settings.sourcePath, other.sourcePath))
-        throw new Error(`The source directory overlaps library "${other.name}"`);
+        throw new MediaLibrarySettingsError(`The source directory overlaps library "${other.name}"`);
     }
     // Registering the directories as media roots checks they exist and are reachable now, not at the first scrape.
     await this.mediaRoots.ensurePathRecord({ hostPath: settings.sourcePath });

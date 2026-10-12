@@ -334,6 +334,7 @@ export class MaintenanceRuntime {
           data: { ...merged.data, actor_profiles: entry.crawlerData?.actor_profiles },
           published,
           keepEdits: false,
+          keepPublishedGenres: true,
           configuration: config,
           translateService,
           signal,

@@ -83,6 +83,7 @@ describe("MoveOutput", () => {
     ).rejects.toThrow("commit failed");
     await expect(readFile(rewritten.sourcePath, "utf8")).resolves.toBe("video");
     await expect(readFile(rewritten.targetPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(existsSync(path.dirname(rewritten.targetPath))).toBe(false);
 
     const crossDevice = await fixture();
     await expect(
@@ -177,6 +178,26 @@ describe("MoveOutput", () => {
     });
     expect(readdir).toHaveBeenCalledOnce();
     await expect(readFile(secondTarget, "utf8")).resolves.toBe("second");
+
+    // Replaced files leave their old folders empty; those go, but nothing above the folder shared with the new location.
+    const relocated = await fixture();
+    const staleDirectory = path.join(relocated.directory, "old", "ACTOR", "extrafanart");
+    await fs.mkdir(staleDirectory, { recursive: true });
+    const stale = path.join(staleDirectory, "fanart1.jpg");
+    await writeFile(stale, "old");
+    await new MoveOutput().install({
+      moves: [relocated.move],
+      artifacts: [
+        {
+          targetPath: path.join(path.dirname(relocated.targetPath), "movie.nfo"),
+          data: "nfo",
+          removeSourcesAfterCommit: [stale],
+        },
+      ],
+      commit: () => undefined,
+    });
+    expect(existsSync(path.join(relocated.directory, "old"))).toBe(false);
+    expect(existsSync(relocated.directory)).toBe(true);
   });
 
   it("rejects occupied destinations and changes after initial observation before mutation", async () => {
@@ -222,6 +243,13 @@ describe("MoveOutput", () => {
       if (transfer === "duplicate" || transfer === "hardlink") {
         await expect(readFile(local.sourcePath, "utf8")).resolves.toBe("video");
         expect((await fs.stat(targetPath)).ino === (await fs.stat(local.sourcePath)).ino).toBe(transfer === "hardlink");
+        if (transfer === "hardlink") {
+          // Publishing the same physical file again only refreshes the entry.
+          await expect(output.install({ moves: [move], artifacts: [], reorganize: true, commit })).resolves.toBe(
+            "committed",
+          );
+          await expect(readFile(targetPath, "utf8")).resolves.toBe("video");
+        }
       } else {
         await expect(readFile(local.sourcePath)).rejects.toMatchObject({ code: "ENOENT" });
       }

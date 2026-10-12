@@ -4,6 +4,7 @@ import { ActivityService } from "./activityService";
 const scrapeRun = (id: string, completedAt: string) => ({
   id,
   rootDisplayName: "Downloads",
+  libraryId: id === "run-done" ? "lib-1" : null,
   disposition: "completed" as const,
   createdAt: completedAt,
   startedAt: new Date(Date.parse(completedAt) - 12_000).toISOString(),
@@ -17,6 +18,7 @@ const scrapeRun = (id: string, completedAt: string) => ({
 describe("ActivityService", () => {
   it("lists scans, scrape runs and the active maintenance session newest first, once per run", async () => {
     const service = new ActivityService({
+      libraries: { list: async () => [{ id: "lib-1", name: "Movies" }] as never },
       scans: {
         list: async () =>
           ({
@@ -88,6 +90,7 @@ describe("ActivityService", () => {
       { id: "run-done", kind: "scrape", status: "completed" },
       { id: "scan-1", kind: "scan", status: "completed" },
     ]);
+    expect(entries.map((entry) => entry.target)).toEqual(["Downloads", "Movies", "Library"]);
     expect(entries[1]?.counts).toEqual({ success: 3, failed: 1, skipped: 0 });
     expect(entries.map((entry) => entry.durationMs)).toEqual([null, 12_000, null]);
   });

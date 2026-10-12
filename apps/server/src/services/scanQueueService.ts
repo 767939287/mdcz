@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
+  filesystemPathKey,
   listRootFiles,
   type MediaRoot,
   normalizeHostPath,
@@ -160,6 +161,10 @@ export class ScanQueueService {
       deduplicateDirectories: true,
       ...createMediaWalkFilters(configuration, supported.size ? supported : undefined),
     });
+    const { repositories } = await this.persistence.getState();
+    const inLibrary = repositories.library.knownMediaIdentities(
+      files.map((file) => filesystemPathKey(path.resolve(file.absolutePath))),
+    );
     return {
       warnings,
       candidates: files.map((file) => {
@@ -171,6 +176,7 @@ export class ScanQueueService {
           lastModified: file.modifiedAt?.toISOString() ?? null,
           extension: path.extname(file.relativePath).replace(/^\./u, "").toLowerCase(),
           ref: { rootId: resolved.root.id, relativePath: resolved.relativePath },
+          inLibrary: inLibrary.has(filesystemPathKey(path.resolve(file.absolutePath))),
         };
       }),
     };

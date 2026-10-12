@@ -1,4 +1,4 @@
-import { MediaDirectoryUnavailableError, toMediaLibraryDto } from "@mdcz/runtime/library";
+import { MediaDirectoryUnavailableError, MediaLibrarySettingsError, toMediaLibraryDto } from "@mdcz/runtime/library";
 import { containsStrmFiles } from "@mdcz/runtime/scrape/utils/strm";
 import { notificationsSchema } from "@mdcz/shared/config";
 import {
@@ -58,6 +58,12 @@ import { TRPCError } from "@trpc/server";
 import { createHealthPayload } from "../http/health";
 import { decorateTaskLog } from "../services/runtimeLogService";
 import { mapConfigError, protectedProcedure, setupProcedure, t } from "./context";
+
+const rejectInvalidLibrary = (error: unknown): never => {
+  if (error instanceof MediaLibrarySettingsError || error instanceof MediaDirectoryUnavailableError)
+    throw new TRPCError({ code: "BAD_REQUEST", message: error.message, cause: error });
+  throw error;
+};
 
 const scrapeLaunchProcedure = protectedProcedure;
 
@@ -234,18 +240,23 @@ export const appRouter = t.router({
       libraries: (await ctx.services.libraries.list()).map(toMediaLibraryDto),
     })),
     create: protectedProcedure.input(mediaLibrarySettingsSchema).mutation(async ({ ctx, input }) => {
-      const library = toMediaLibraryDto(await ctx.services.libraries.create(input));
+      const library = toMediaLibraryDto(await ctx.services.libraries.create(input).catch(rejectInvalidLibrary));
       await ctx.services.libraryWatch.refresh();
+      ctx.services.qbittorrent.refresh();
       return library;
     }),
     update: protectedProcedure.input(mediaLibraryUpdateInputSchema).mutation(async ({ ctx, input }) => {
-      const library = toMediaLibraryDto(await ctx.services.libraries.update(input.id, input.settings));
+      const library = toMediaLibraryDto(
+        await ctx.services.libraries.update(input.id, input.settings).catch(rejectInvalidLibrary),
+      );
       await ctx.services.libraryWatch.refresh();
+      ctx.services.qbittorrent.refresh();
       return library;
     }),
     delete: protectedProcedure.input(mediaLibraryIdInputSchema).mutation(async ({ ctx, input }) => {
       await ctx.services.libraries.delete(input.id);
       await ctx.services.libraryWatch.refresh();
+      ctx.services.qbittorrent.refresh();
       return { success: true as const };
     }),
     previewNaming: protectedProcedure

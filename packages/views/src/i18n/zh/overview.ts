@@ -7,7 +7,6 @@ export const overview: Messages["overview"] = {
     title: "开始刮削",
     description: "进入工作台执行元数据提取。当前输出目录概况会在完成刮削后保持更新。",
     loadFailed: "加载失败",
-    waitingFirstScrape: "等待首次刮削",
     notConfigured: "未配置",
     files: "文件数",
     size: "大小",

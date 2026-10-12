@@ -418,7 +418,7 @@ describe("buildServer composition integration", () => {
       headers: { authorization: `Bearer ${token}` },
       payload: { name: "Offline", sourcePath: join(root, "..", "offline"), placement: "inPlace" },
     });
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(400);
     expect(await libraries()).toEqual([{ sourcePath: root, automation: "scrape" }]);
   });
   it("exposes protected settings parity runtime actions through dedicated tRPC routers", async () => {
@@ -526,7 +526,7 @@ describe("buildServer composition integration", () => {
     expect(updateResponse.statusCode).toBe(404);
   });
 
-  it("builds overview fallback output from library entries independently of recent visibility", async () => {
+  it("sums overview output over every library entry independently of recent visibility", async () => {
     const root = await createTempRoot("overview-root");
     await writeFile(join(root, "visible.mp4"), "visible");
     await writeFile(join(root, "hidden.mp4"), "hidden entry bytes");
@@ -574,12 +574,7 @@ describe("buildServer composition integration", () => {
     });
 
     expect(overviewResponse.statusCode).toBe(200);
-    expect(overviewResponse.json().result.data.output).toEqual({
-      fileCount: 10,
-      totalBytes: 33,
-      outputAt: "2026-05-11T00:08:00.000Z",
-      rootPath: null,
-    });
+    expect(overviewResponse.json().result.data.output).toEqual({ fileCount: 10, totalBytes: 33 });
     const recentAcquisitions = overviewResponse.json().result.data.recentAcquisitions;
     expect(recentAcquisitions).toHaveLength(8);
     expect(recentAcquisitions[0]).toMatchObject({

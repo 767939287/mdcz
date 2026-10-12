@@ -180,12 +180,14 @@ function MediaRow({
   selected,
   disabled,
   formatBytes,
+  inLibraryLabel,
   onToggle,
 }: {
   candidate: MediaCandidate;
   selected: boolean;
   disabled: boolean;
   formatBytes: (value: number, options?: { trimTrailingZeros?: boolean }) => string;
+  inLibraryLabel: string;
   onToggle: () => void;
 }) {
   const checkboxId = useId();
@@ -204,7 +206,12 @@ function MediaRow({
         onCheckedChange={onToggle}
       />
       <div className="min-w-0 space-y-0.5">
-        <div className="truncate text-sm font-bold leading-5 tracking-tight text-foreground">{candidate.name}</div>
+        <div className="truncate text-sm font-bold leading-5 tracking-tight text-foreground">
+          {candidate.name}
+          {candidate.inLibrary ? (
+            <span className="ml-2 text-[10px] font-normal text-muted-foreground">{inLibraryLabel}</span>
+          ) : null}
+        </div>
         {candidate.ref.relativePath.includes("/") ? (
           <div className="truncate font-mono text-[10px]/4 text-muted-foreground">
             {candidate.ref.relativePath.slice(0, candidate.ref.relativePath.lastIndexOf("/"))}
@@ -730,6 +737,7 @@ export function WorkbenchSetupView({
                       selected={selectedPathSet.has(candidate.path)}
                       disabled={startPending || scanning}
                       formatBytes={formatBytes}
+                      inLibraryLabel={t.workbench.alreadyInLibrary}
                       onToggle={() => onToggleCandidate(candidate.path)}
                     />
                   ))}

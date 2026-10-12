@@ -184,7 +184,10 @@ export class AutomationService {
       startedAt: task.startedAt,
       completedAt: task.completedAt,
       summary: `${kind} ${target}: ${task.status}`,
-      errors: task.error ? [task.error] : [],
+      errors: [
+        ...(task.error ? [task.error] : []),
+        ...(task.counts?.failed ? [`${task.counts.failed} item(s) failed`] : []),
+      ],
     };
   }
 
@@ -192,9 +195,10 @@ export class AutomationService {
     const configuration = await this.deps.config.get();
     const terminal = ["completed", "failed", "stopped", "interrupted"].includes(task.status);
     if (configuration.notifications.webhookUrl) this.enqueueWebhook(configuration, task, terminal);
-    if (!terminal || task.kind !== "scrape" || !task.counts || !configuration.notifications.channels.length) return;
+    if (!terminal || task.kind !== "scrape" || !task.counts) return;
     const pending = this.#pendingSinceLastMessage;
     this.#pendingSinceLastMessage = 0;
+    if (!configuration.notifications.channels.length) return;
     const { success, failed } = task.counts;
     const message = {
       title: "MDCz",

@@ -678,7 +678,7 @@ describe("LibraryRepository", () => {
       missingBackdrop: 1,
       missingSynopsis: 0,
       noNfo: 0,
-      duplicate: 1,
+      duplicate: 0,
     });
     const ids = async (filter: object) =>
       (await repository.listEntriesPage({ limit: 10, ...filter })).entries.map((entry) => entry.id).sort();
@@ -689,7 +689,9 @@ describe("LibraryRepository", () => {
     });
     await expect(ids({ health: "missingBackdrop", includeBackdrop: false })).resolves.toEqual([]);
     await expect(ids({ health: "missingBackdrop", includeBackdrop: true })).resolves.toEqual(["bare", "translated"]);
-    await expect(ids({ health: "duplicate", pathPrefixes: [resolve("/root-1")] })).resolves.toEqual(["healthy"]);
+    // The other copy lives in a different library, so neither side counts it.
+    await expect(ids({ health: "duplicate", pathPrefixes: [resolve("/root-1")] })).resolves.toEqual([]);
+    await expect(ids({ health: "duplicate" })).resolves.toEqual(["bare", "healthy"]);
     await expect(ids({ actor: "Bob" })).resolves.toEqual(["bare", "translated"]);
     await expect(ids({ studio: "S2", tag: "drama" })).resolves.toEqual([]);
     await expect(ids({ tag: "3p" })).resolves.toEqual(["bare"]);

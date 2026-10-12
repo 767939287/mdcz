@@ -146,6 +146,7 @@ test("submits directories without scanning and keeps explicit previews cancellab
     extension: "mp4",
     lastModified: null,
     ref: { rootId: "changed", relativePath: `${name}.mp4` },
+    inLibrary: false,
   });
   const first = candidate("ONE-001");
   const second = candidate("TWO-002");

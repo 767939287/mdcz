@@ -767,7 +767,7 @@ describe("DownloadManager keep flags", () => {
     });
   });
 
-  it("keeps large and portrait poster derivation skip cases non-blocking", async () => {
+  it("keeps a large poster and uses a portrait thumb as the poster", async () => {
     for (const testCase of [
       {
         seed: async (root: string) => {
@@ -779,13 +779,11 @@ describe("DownloadManager keep flags", () => {
             minBytes: 50_000,
           });
         },
-        expectPoster: true,
       },
       {
         seed: async (root: string) => {
           await writeSvgImage(join(root, "thumb.jpg"), { width: 800, height: 1200, color: "#4a8bd6" });
         },
-        expectPoster: false,
       },
     ]) {
       const { root, manager } = await createSubject();
@@ -804,12 +802,7 @@ describe("DownloadManager keep flags", () => {
       );
       expect(assets.thumb).toBe(join(root, "thumb.jpg"));
       expect(data.poster_source_url).toBeUndefined();
-      if (testCase.expectPoster) {
-        expect(assets.poster).toBe(join(root, "poster.jpg"));
-      } else {
-        expect(assets.poster).toBeUndefined();
-        await expect(access(join(root, "poster.jpg"))).rejects.toThrow();
-      }
+      expect(assets.poster).toBe(join(root, "poster.jpg"));
     }
   });
 

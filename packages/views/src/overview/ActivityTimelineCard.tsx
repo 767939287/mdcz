@@ -25,10 +25,12 @@ const statusIcon = (status: ActivityEntryDto["status"]): { icon: LucideIcon; cla
 
 export interface ActivityTimelineCardProps {
   entries: readonly ActivityEntryDto[];
+  /** The maintenance row is the server's current session, so it opens the workbench that shows it. */
+  onOpenMaintenance?: () => void;
 }
 
 /** One list for scans, scrape runs and maintenance, so what the server did is readable in one place. */
-export function ActivityTimelineCard({ entries }: ActivityTimelineCardProps) {
+export function ActivityTimelineCard({ entries, onOpenMaintenance }: ActivityTimelineCardProps) {
   const t = useT();
   if (entries.length === 0) return null;
 
@@ -45,8 +47,9 @@ export function ActivityTimelineCard({ entries }: ActivityTimelineCardProps) {
               : "",
             duration ?? "",
           ].filter(Boolean);
-          return (
-            <li className="flex items-start gap-3 px-5 py-3.5" key={`${entry.kind}:${entry.id}`}>
+          const rowClassName = "flex w-full items-start gap-3 px-5 py-3.5 text-left";
+          const row = (
+            <>
               <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", className)} />
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
@@ -63,6 +66,21 @@ export function ActivityTimelineCard({ entries }: ActivityTimelineCardProps) {
               <time className="shrink-0 text-xs text-muted-foreground" dateTime={entry.updatedAt}>
                 {new Date(entry.updatedAt).toLocaleString()}
               </time>
+            </>
+          );
+          return (
+            <li key={`${entry.kind}:${entry.id}`}>
+              {entry.kind === "maintenance" && onOpenMaintenance ? (
+                <button
+                  type="button"
+                  className={cn(rowClassName, "transition-colors hover:bg-surface-low")}
+                  onClick={onOpenMaintenance}
+                >
+                  {row}
+                </button>
+              ) : (
+                <div className={rowClassName}>{row}</div>
+              )}
             </li>
           );
         })}

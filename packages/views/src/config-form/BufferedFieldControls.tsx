@@ -97,9 +97,13 @@ export function useBufferedFieldController(
       commitDraft();
       field.onBlur();
     },
+    // Committing while typing lets the autosave debounce carry the edit; a draft held until blur is lost when the
+    // page closes first.
     handleChangeValue: (nextDraft: string) => {
       isFocusedRef.current = true;
       setDraftValue(nextDraft);
+      const nextValue = parse(nextDraft, field.value);
+      if (!valuesEqual(nextValue, field.value)) field.onChange(nextValue);
     },
     handleCommitKey: (event) => {
       if (!commitOnEnter || event.key !== "Enter" || event.nativeEvent.isComposing) {

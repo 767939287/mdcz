@@ -130,33 +130,13 @@ export class LibraryService {
 
   async overview(): Promise<OverviewSummaryResponse> {
     const state = await this.persistence.getState();
-    const [latestRun, roots, summary] = await Promise.all([
-      state.repositories.scrapeRuns.getLatestFinalized(),
+    const [roots, summary] = await Promise.all([
       this.mediaRoots.list(),
       state.repositories.library.getOverviewSummary(8),
     ]);
-    const latestOutput = latestRun ? state.repositories.scrapeRuns.summary(latestRun) : null;
     const rootMap = new Map(roots.roots.map((root) => [root.id, root]));
     const entries = summary.recentEntries.filter((entry) => rootMap.has(entry.rootId));
     const recent = createRecentAcquisitionsFromEntries(entries, 8);
-    const latestEntryTimestamp = summary.latestEntryTimestamp
-      ? summary.latestEntryTimestamp instanceof Date
-        ? summary.latestEntryTimestamp
-        : new Date(Number(summary.latestEntryTimestamp))
-      : null;
-    const output = latestOutput
-      ? {
-          fileCount: latestOutput.successCount,
-          totalBytes: latestOutput.totalBytes,
-          outputAt: latestOutput.completedAt.toISOString(),
-          rootPath: latestOutput.outputRootId ? (rootMap.get(latestOutput.outputRootId)?.hostPath ?? null) : null,
-        }
-      : {
-          fileCount: summary.fileCount,
-          totalBytes: summary.totalBytes,
-          outputAt: latestEntryTimestamp?.toISOString() ?? null,
-          rootPath: null,
-        };
     const recentAcquisitions = await Promise.all(
       recent.map(async (entry) => {
         const record = entries.find((candidate) => candidate.id === entry.id);
@@ -177,12 +157,7 @@ export class LibraryService {
     );
 
     return {
-      output: {
-        fileCount: output.fileCount,
-        totalBytes: output.totalBytes,
-        outputAt: output.outputAt,
-        rootPath: output.rootPath,
-      },
+      output: { fileCount: summary.fileCount, totalBytes: summary.totalBytes },
       recentAcquisitions,
     };
   }

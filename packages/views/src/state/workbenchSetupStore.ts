@@ -88,7 +88,7 @@ export const useWorkbenchSetupStore = create<WorkbenchSetupState>((set, get) => 
       return {
         candidates,
         selectedPaths: candidates
-          .filter((candidate) => !selected || selected.has(candidate.path))
+          .filter((candidate) => (selected ? selected.has(candidate.path) : !candidate.inLibrary))
           .map((candidate) => candidate.path),
         committedPlanKey: planKey,
         warnings: warnings ?? { count: 0, paths: [] },

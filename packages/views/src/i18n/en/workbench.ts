@@ -51,6 +51,7 @@ export const workbench = {
   inaccessiblePathsWarning: (count: number) => `Some paths are inaccessible; ${count} skipped`,
   selectVisibleFilesAriaLabel: "Select currently visible files",
   refreshFiles: "Refresh files",
+  alreadyInLibrary: "Already in library",
   selectedOfTotalFiles: (selected: number, total: number) => `${selected} / ${total} file(s) selected`,
   searchFilesAriaLabel: "Search files",
   searchFilesPlaceholder: "Search files…",

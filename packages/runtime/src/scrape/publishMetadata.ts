@@ -15,6 +15,8 @@ export const publishMetadata = async (input: {
   data: CrawlerData;
   published?: { crawlerData?: CrawlerData; localState?: NfoLocalState };
   keepEdits: boolean;
+  /** Reuses the NFO's genres instead of translating the sites' again, so a re-merge makes no LLM call for them. */
+  keepPublishedGenres?: boolean;
   configuration: Configuration;
   translateService: Pick<TranslateService, "translateCrawlerData">;
   signal?: AbortSignal;
@@ -23,6 +25,7 @@ export const publishMetadata = async (input: {
   const edited = editedKeys(input.published?.localState);
   const kept = lockedKeys(input.published?.localState);
   if (input.keepEdits) for (const key of edited) kept.add(key);
+  if (input.keepPublishedGenres && published?.genres?.length && !edited.has("genres")) kept.add("genres");
   // The NFO's runtime was measured from the video; sites list rounded catalog runtimes that would never match it.
   const data = { ...input.data, durationSeconds: published?.durationSeconds ?? input.data.durationSeconds };
   for (const key of kept) Object.assign(data, { [key]: published?.[key] });

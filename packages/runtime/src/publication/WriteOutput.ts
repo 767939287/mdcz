@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
-import { outputFileSystem } from "./outputFileSystem";
+import { CreatedDirectories, outputFileSystem } from "./outputFileSystem";
 import type { PublicationFileSystem } from "./types";
 
 export type WriteArtifact = { targetPath: string; removeSourcesAfterCommit?: readonly string[] } & (
@@ -23,8 +23,13 @@ export class WriteOutput {
       beforeCommit?(): Promise<void> | void;
       commit(): TResult | Promise<TResult>;
       protectedMediaFiles?: readonly string[];
+      /** The caller's, which then takes back the empty folders itself once it has restored what else it moved. */
+      directories?: CreatedDirectories;
+      /** Files this publication moved out of their folders; folders left empty are removed along with the removed sources'. */
+      vacatedPaths?: readonly string[];
     },
   ): Promise<TResult> {
+    const directories = options.directories ?? new CreatedDirectories(this.fileSystem);
     const staged: Array<{ targetPath: string; temporaryPath: string; size?: number }> = [];
     const replacements: Array<{ targetPath: string; backupPath?: string; linkedBackup?: boolean; installed: boolean }> =
       [];
@@ -52,7 +57,7 @@ export class WriteOutput {
     }
     try {
       for (const artifact of artifacts) {
-        await this.fileSystem.mkdir(path.dirname(artifact.targetPath), { recursive: true });
+        await directories.make(path.dirname(artifact.targetPath));
         const consuming = "sourcePath" in artifact && consumedSources.get(pathKey(artifact.sourcePath)) === artifact;
         const temporaryPath =
           "sourcePath" in artifact && consuming
@@ -142,13 +147,19 @@ export class WriteOutput {
             (sourcePath) => !installedTargets.has(pathKey(sourcePath)) && !protectedMedia.has(pathKey(sourcePath)),
           ),
       );
+      const emptied = [...(options.vacatedPaths ?? [])];
       for (const sourcePath of obsoleteSources) {
         try {
           await this.fileSystem.rm(sourcePath, { force: true });
+          emptied.push(sourcePath);
         } catch (error) {
           this.logger.warn(`Published artifacts but failed to remove source ${sourcePath}: ${toErrorMessage(error)}`);
         }
       }
+      await this.removeEmptiedDirectories(
+        emptied,
+        staged.map((artifact) => path.dirname(artifact.targetPath)),
+      );
       return value;
     } catch (error) {
       if (!committed) {
@@ -173,6 +184,36 @@ export class WriteOutput {
           await this.fileSystem.rm(temporaryPath, { force: true });
         } catch (error) {
           this.logger.warn(`Failed to remove publication temporary file ${temporaryPath}: ${toErrorMessage(error)}`);
+        }
+      }
+      if (!committed && !options.directories) await directories.removeEmpty((message) => this.logger.warn(message));
+    }
+  }
+  /**
+   * Removes the folders a relocation left empty, e.g. the old movie folder and its extrafanart. Never ascends past
+   * the folder shared with the new location, so library and source roots stay.
+   */
+  private async removeEmptiedDirectories(emptiedPaths: readonly string[], targetDirectories: readonly string[]) {
+    const contains = (directory: string, candidate: string) => {
+      const relative = path.relative(directory, candidate);
+      return !relative.startsWith("..") && !path.isAbsolute(relative);
+    };
+    for (const emptiedPath of emptiedPaths) {
+      let boundary = path.dirname(emptiedPath);
+      while (!targetDirectories.every((directory) => contains(boundary, directory))) {
+        const parent = path.dirname(boundary);
+        if (parent === boundary) break;
+        boundary = parent;
+      }
+      for (let directory = path.dirname(emptiedPath); directory !== boundary; directory = path.dirname(directory)) {
+        try {
+          await this.fileSystem.rmdir(directory);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          // A folder that still holds anything, or is already gone, stays as it is.
+          if (code !== "ENOTEMPTY" && code !== "EEXIST" && code !== "ENOENT")
+            this.logger.warn(`Failed to remove empty directory ${directory}: ${toErrorMessage(error)}`);
+          break;
         }
       }
     }

@@ -62,6 +62,14 @@ describe("publishMetadata", () => {
       translated: ["Source Title"],
     },
     {
+      name: "re-merges with the genres already in the NFO instead of translating the sites' again",
+      merged: movie({ genres: ["Site"] }),
+      published: movie({ title_zh: "译名", genres: ["已译"] }),
+      keepPublishedGenres: true,
+      expected: { genres: ["已译"] },
+      translated: [],
+    },
+    {
       name: "keeps the runtime the NFO measured from the video over the sites' catalog runtime",
       merged: movie({ durationSeconds: 7380 }),
       published: movie({ title_zh: "译名", durationSeconds: 7377 }),
@@ -82,6 +90,7 @@ describe("publishMetadata", () => {
     published: CrawlerData;
     localState?: NfoLocalState;
     keepEdits?: boolean;
+    keepPublishedGenres?: boolean;
     enableTranslation?: boolean;
     expected: Partial<CrawlerData>;
     translated: string[];
@@ -90,6 +99,7 @@ describe("publishMetadata", () => {
     published,
     localState,
     keepEdits = true,
+    keepPublishedGenres,
     enableTranslation = true,
     expected,
     translated,
@@ -105,6 +115,7 @@ describe("publishMetadata", () => {
       data: merged,
       published: { crawlerData: published, localState },
       keepEdits,
+      keepPublishedGenres,
       configuration: config(enableTranslation),
       translateService,
     });

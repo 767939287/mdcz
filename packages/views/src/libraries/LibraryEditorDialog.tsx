@@ -89,7 +89,7 @@ export function LibraryEditorDialog({
     if (!open || !probeStubs || !sourcePath) return;
     let active = true;
     const timer = window.setTimeout(() => {
-      // A path still being typed does not exist yet; that only means no hint.
+      // A path still being typed may be relative or incomplete; that only means no hint.
       probeStubs(sourcePath).then(
         (found) => active && setSourceHasStubs(found),
         () => undefined,
@@ -133,7 +133,14 @@ export function LibraryEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[90vh] max-w-2xl overflow-y-auto"
+        onEscapeKeyDown={(event) => {
+          // Escape first closes an open path suggestion list; the dialog stays.
+          if (event.target instanceof HTMLElement && event.target.getAttribute("aria-expanded") === "true")
+            event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {library
@@ -152,7 +159,7 @@ export function LibraryEditorDialog({
           </Field>
           <Field
             label={t.libraries.fields.sourcePath}
-            hint={t.libraries.fields.sourcePathHint}
+            hint={importExisting ? t.libraries.fields.importSourcePathHint : t.libraries.fields.sourcePathHint}
             error={showErrors ? fieldErrors.sourcePath : undefined}
           >
             {(id) => (
@@ -316,7 +323,11 @@ export function LibraryEditorDialog({
             </div>
           ) : null}
           {submitError ? (
-            <div role="alert" className="text-sm text-destructive">
+            <div
+              role="alert"
+              className="text-sm text-destructive"
+              ref={(node) => node?.scrollIntoView({ block: "nearest" })}
+            >
               {submitError}
             </div>
           ) : null}

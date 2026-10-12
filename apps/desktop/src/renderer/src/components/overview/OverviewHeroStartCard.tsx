@@ -1,8 +1,11 @@
+import { openNewWorkbenchTask } from "@mdcz/views/adapters/workbenchSession";
 import { useT } from "@mdcz/views/i18n";
 import { OverviewHeroStartCard as SharedOverviewHeroStartCard } from "@mdcz/views/overview";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
+import { toast } from "sonner";
+import { createDesktopMaintenanceActionPort } from "@/adapters/ports";
 import { ipc } from "@/client/ipc";
 import { useCurrentConfig } from "@/hooks/configQueries";
 import { useOutputSummary } from "@/hooks/useOverview";
@@ -28,7 +31,14 @@ export function OverviewHeroStartCard({ className }: OverviewHeroStartCardProps)
       isLoading={configQ.isLoading || summaryQ.isLoading || librariesQ.isLoading}
       labels={{ startAction: t.overview.hero.startAction, setupAction: t.libraries.createFirst }}
       onSetup={() => navigate({ to: "/libraries" })}
-      onStart={() => navigate({ to: "/workbench" })}
+      onStart={async () => {
+        try {
+          await openNewWorkbenchTask("scrape", () => createDesktopMaintenanceActionPort().discardSession());
+          await navigate({ to: "/workbench" });
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : String(error));
+        }
+      }}
     />
   );
 }

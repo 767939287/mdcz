@@ -108,6 +108,7 @@ export function SettingsEditorAutosaveProvider({
   const pendingSaveValuesRef = useRef<Map<string, unknown>>(new Map());
   const saveRevisionsRef = useRef<Map<string, number>>(new Map());
   const debounceTimersRef = useRef<Map<string, number>>(new Map());
+  const pendingFlushesRef = useRef<Map<string, () => void>>(new Map());
   const fadeTimersRef = useRef<Map<string, number>>(new Map());
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -125,6 +126,7 @@ export function SettingsEditorAutosaveProvider({
   }, []);
 
   const clearFieldTimers = useCallback((path: string) => {
+    pendingFlushesRef.current.delete(path);
     const debounceTimer = debounceTimersRef.current.get(path);
     if (debounceTimer !== undefined) {
       window.clearTimeout(debounceTimer);
@@ -357,6 +359,8 @@ export function SettingsEditorAutosaveProvider({
       }
 
       return () => {
+        // Leaving the page must not discard an edit still waiting on its debounce.
+        pendingFlushesRef.current.get(path)?.();
         clearFieldTimers(path);
         pendingProgrammaticValuesRef.current.delete(path);
         pendingSaveValuesRef.current.delete(path);
@@ -444,17 +448,19 @@ export function SettingsEditorAutosaveProvider({
       }
 
       pendingSaveValuesRef.current.set(path, value);
-      const debounceTimer = window.setTimeout(() => {
-        debounceTimersRef.current.delete(path);
-        enqueueSave(path, value, revision);
-      }, field.debounceMs);
-
-      debounceTimersRef.current.set(path, debounceTimer);
+      const flush = () => enqueueSave(path, value, revision);
+      pendingFlushesRef.current.set(path, flush);
+      debounceTimersRef.current.set(path, window.setTimeout(flush, field.debounceMs));
     }
   }, [clearFieldTimers, enqueueSave, setFieldStatus, watchedPaths, watchedValues]);
 
   useEffect(() => {
+    const flushPendingSaves = () => {
+      for (const flush of [...pendingFlushesRef.current.values()]) flush();
+    };
+    window.addEventListener("pagehide", flushPendingSaves);
     return () => {
+      window.removeEventListener("pagehide", flushPendingSaves);
       for (const timer of debounceTimersRef.current.values()) {
         window.clearTimeout(timer);
       }

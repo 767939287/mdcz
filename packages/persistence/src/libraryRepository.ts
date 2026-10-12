@@ -858,7 +858,7 @@ const hasLocalAsset = (kind: string): SQL =>
   sql`EXISTS (SELECT 1 FROM library_item_assets AS asset WHERE asset.item_id = ${libraryItems.id} AND asset.kind = ${kind} AND asset.root_id IS NOT NULL)`;
 
 // One definition per issue serves the listing filter and the summary counts, so they cannot disagree.
-const HEALTH_CONDITIONS: Record<LibraryHealthIssue, SQL> = {
+const HEALTH_CONDITIONS: Record<Exclude<LibraryHealthIssue, "duplicate">, SQL> = {
   missingPoster: sql`NOT ${hasLocalAsset("poster")}`,
   missingBackdrop: sql`NOT ${hasLocalAsset("fanart")}`,
   noNfo: sql`NOT ${hasLocalAsset("nfo")}`,
@@ -866,32 +866,39 @@ const HEALTH_CONDITIONS: Record<LibraryHealthIssue, SQL> = {
     nullif(trim(json_extract(${libraryItems.crawlerDataJson}, '$.plot_zh')), ''),
     nullif(trim(json_extract(${libraryItems.crawlerDataJson}, '$.plot')), '')
   ) IS NULL`,
-  duplicate: sql`trim(coalesce(${libraryItems.number}, '')) <> '' AND EXISTS (
-    SELECT 1 FROM library_items AS other
-    WHERE other.id <> ${libraryItems.id} AND lower(other.number) = lower(${libraryItems.number})
-  )`,
 };
 
-const healthCondition = (issue: LibraryHealthIssue, filter: Pick<LibraryEntryFilter, "includeBackdrop">): SQL =>
-  issue === "missingBackdrop" && filter.includeBackdrop === false ? sql`0` : HEALTH_CONDITIONS[issue];
+const pathPrefixCondition = (prefixes: readonly string[], itemId: SQL): SQL => {
+  const matches = prefixes.map((prefix) => {
+    const pattern = `${escapeLikePattern(prefix.replaceAll("\\", "/").replace(/\/+$/u, "").toLowerCase())}/%`;
+    return sql`lower(rtrim(replace(prefix_root.host_path, '\\', '/'), '/') || '/' || prefix_file.root_relative_path) LIKE ${pattern} ESCAPE '\\'`;
+  });
+  return sql`EXISTS (
+    SELECT 1
+    FROM library_item_files AS prefix_file
+    INNER JOIN media_roots AS prefix_root ON prefix_root.id = prefix_file.root_id
+    WHERE prefix_file.item_id = ${itemId}
+      AND (${sql.join(matches.length ? matches : [sql`0`], sql` OR `)})
+  )`;
+};
+
+const healthCondition = (
+  issue: LibraryHealthIssue,
+  filter: Pick<LibraryEntryFilter, "includeBackdrop" | "pathPrefixes">,
+): SQL => {
+  if (issue === "missingBackdrop" && filter.includeBackdrop === false) return sql`0`;
+  if (issue !== "duplicate") return HEALTH_CONDITIONS[issue];
+  // The same number in another library is a different copy, not a duplicate.
+  const sameScope = filter.pathPrefixes ? sql`AND ${pathPrefixCondition(filter.pathPrefixes, sql`other.id`)}` : sql``;
+  return sql`trim(coalesce(${libraryItems.number}, '')) <> '' AND EXISTS (
+    SELECT 1 FROM library_items AS other
+    WHERE other.id <> ${libraryItems.id} AND lower(other.number) = lower(${libraryItems.number}) ${sameScope}
+  )`;
+};
 
 const buildLibraryListWhere = (input: LibraryEntryFilter): SQL | undefined => {
   const filters: SQL[] = [];
-  if (input.pathPrefixes) {
-    const matches = input.pathPrefixes.map((prefix) => {
-      const pattern = `${escapeLikePattern(prefix.replaceAll("\\", "/").replace(/\/+$/u, "").toLowerCase())}/%`;
-      return sql`lower(rtrim(replace(prefix_root.host_path, '\\', '/'), '/') || '/' || prefix_file.root_relative_path) LIKE ${pattern} ESCAPE '\\'`;
-    });
-    filters.push(
-      sql`EXISTS (
-        SELECT 1
-        FROM library_item_files AS prefix_file
-        INNER JOIN media_roots AS prefix_root ON prefix_root.id = prefix_file.root_id
-        WHERE prefix_file.item_id = ${libraryItems.id}
-          AND (${sql.join(matches.length ? matches : [sql`0`], sql` OR `)})
-      )`,
-    );
-  }
+  if (input.pathPrefixes) filters.push(pathPrefixCondition(input.pathPrefixes, sql`${libraryItems.id}`));
   if (input.health) filters.push(healthCondition(input.health, input));
   if (input.actor)
     filters.push(sql`EXISTS (SELECT 1 FROM json_each(${libraryItems.actorsJson}) WHERE value = ${input.actor})`);

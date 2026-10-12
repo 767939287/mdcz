@@ -1,5 +1,6 @@
 import { toErrorMessage } from "@mdcz/shared/error";
 import type { OverviewRecentAcquisitionDto } from "@mdcz/shared/serverDtos";
+import { openNewWorkbenchTask } from "@mdcz/views/adapters/workbenchSession";
 import { getT, useT } from "@mdcz/views/i18n";
 import {
   ActivityTimelineCard,
@@ -12,8 +13,9 @@ import {
 } from "@mdcz/views/overview";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { createWebMaintenanceActionPort } from "../adapters/ports";
 import { api, getLibraryAssetSrc } from "../client";
 import { queryKeys } from "../lib/queryKeys";
 import { ErrorBanner } from "../routeCommon";
@@ -21,11 +23,10 @@ import { buildHref } from "../routeHelpers";
 
 export const hasWorkbenchOutput = (input: {
   libraryCount: number;
-  output?: { fileCount: number; totalBytes: number; rootPath: string | null } | null;
+  output?: { fileCount: number; totalBytes: number } | null;
   recentCount: number;
 }): boolean =>
   input.libraryCount > 0 ||
-  Boolean(input.output?.rootPath) ||
   (input.output?.fileCount ?? 0) > 0 ||
   (input.output?.totalBytes ?? 0) > 0 ||
   input.recentCount > 0;
@@ -34,6 +35,7 @@ export function OverviewPage() {
   const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const maintenancePort = useMemo(() => createWebMaintenanceActionPort(), []);
   const [removeTarget, setRemoveTarget] = useState<OverviewRecentAcquisitionDto | null>(null);
   const librariesQ = useQuery({ queryKey: queryKeys.libraries.all, queryFn: () => api.libraries.list(), retry: false });
   const overviewQ = useQuery({
@@ -48,6 +50,16 @@ export function OverviewPage() {
     refetchInterval: (query) => (hasActiveActivity(query.state.data?.entries ?? []) ? 3_000 : false),
     retry: false,
   });
+  const openWorkbench = async (mode: "scrape" | "maintenance") => {
+    try {
+      await openNewWorkbenchTask(mode, () => maintenancePort.discardSession());
+      await navigate(
+        mode === "maintenance" ? { to: buildHref("/workbench", { intent: "maintenance" }) } : { to: "/workbench" },
+      );
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
+  };
   const output = overviewQ.data?.output;
   const recent = overviewQ.data?.recentAcquisitions ?? [];
   const configured = hasWorkbenchOutput({
@@ -70,15 +82,9 @@ export function OverviewPage() {
             onSetup={() => {
               void navigate({ to: "/libraries" });
             }}
-            onStart={() => {
-              void navigate({ to: "/workbench" });
-            }}
+            onStart={() => void openWorkbench("scrape")}
           />
-          <OverviewMaintenanceCard
-            onOpen={() => {
-              void navigate({ to: buildHref("/workbench", { intent: "maintenance" }) });
-            }}
-          />
+          <OverviewMaintenanceCard onOpen={() => void openWorkbench("maintenance")} />
         </section>
 
         <SiteHealthCard
@@ -90,7 +96,12 @@ export function OverviewPage() {
 
         {overviewQ.error && <ErrorBanner>{toErrorMessage(overviewQ.error)}</ErrorBanner>}
 
-        <ActivityTimelineCard entries={activityQ.data?.entries ?? []} />
+        <ActivityTimelineCard
+          entries={activityQ.data?.entries ?? []}
+          onOpenMaintenance={() => {
+            void navigate({ to: buildHref("/workbench", { intent: "maintenance" }) });
+          }}
+        />
 
         <section className="col-span-12 mt-8">
           <div className="mb-8">

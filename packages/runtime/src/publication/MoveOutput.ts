@@ -7,7 +7,7 @@ import type { RootFileRef } from "@mdcz/shared/mediaRef";
 import { isPrimaryVideoFile } from "../scrape/media/generatedSidecarVideos";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
 import { PublicationConflictError } from "./conflicts";
-import { outputFileSystem } from "./outputFileSystem";
+import { CreatedDirectories, outputFileSystem } from "./outputFileSystem";
 import type { PublicationFileSystem } from "./types";
 import { type WriteArtifact, WriteOutput } from "./WriteOutput";
 
@@ -63,6 +63,7 @@ export class MoveOutput {
     const temporaryPaths = new Set<string>();
     const retainedSources = new Map<string, MediaFileFacts>();
     const relocations: Relocation[] = [];
+    const directories = new CreatedDirectories(fs);
     const targets = new Set(input.moves.map((move) => filesystemPathKey(move.targetPath)));
     if (targets.size !== input.moves.length) throw new Error("Duplicate media move target");
     const targetEntries = new Map<string, Set<string>>();
@@ -101,6 +102,8 @@ export class MoveOutput {
     try {
       return await new WriteOutput(fs, this.logger).install(input.artifacts, {
         validate: input.validate,
+        directories,
+        vacatedPaths: input.reorganize ? input.moves.map((move) => move.sourcePath) : undefined,
         protectedMediaFiles: [
           ...(input.protectedMediaFiles ?? []),
           ...input.moves.flatMap((move) => [move.sourcePath, move.targetPath]),
@@ -123,7 +126,7 @@ export class MoveOutput {
           }
           for (const move of input.moves) {
             const sourcePath = parkedSources.get(move.sourcePath) ?? move.sourcePath;
-            await fs.mkdir(path.dirname(move.targetPath), { recursive: true });
+            await directories.make(path.dirname(move.targetPath));
             const link = await fs.lstat(sourcePath);
             if (
               link.isSymbolicLink() &&
@@ -132,8 +135,15 @@ export class MoveOutput {
             )
               throw new Error(`Cannot move a relative file symlink to another directory: ${sourcePath}`);
             await assertSource(move, sourcePath, link.isSymbolicLink() ? undefined : link);
-            await assertTarget(move, sourcePath);
             if (move.transfer === "hardlink" && move.rewrittenContent === undefined) {
+              // Re-publishing a file that already is the library's hardlink only refreshes its metadata.
+              const existing = await fs.stat(move.targetPath).catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return undefined;
+                throw error;
+              });
+              const current = await fs.stat(sourcePath);
+              if (existing && existing.dev === current.dev && existing.ino === current.ino) continue;
+              await assertTarget(move, sourcePath);
               try {
                 await fs.link(sourcePath, move.targetPath);
               } catch (error) {
@@ -151,6 +161,7 @@ export class MoveOutput {
                   ?.add(filesystemPathKey(move.targetPath));
               continue;
             }
+            await assertTarget(move, sourcePath);
             let copied = move.rewrittenContent !== undefined || move.transfer !== "move";
             if (!copied) {
               try {
@@ -215,6 +226,7 @@ export class MoveOutput {
           this.logger.warn(`Failed to remove publication staging ${staging}: ${toErrorMessage(error)}`);
         }
       }
+      if (!committed) await directories.removeEmpty((message) => this.logger.warn(message));
     }
   }
 
