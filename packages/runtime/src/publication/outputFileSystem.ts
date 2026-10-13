@@ -38,6 +38,23 @@ export const outputFileSystem: PublicationFileSystem = {
   },
 };
 
+/** Removes `directory` if it is empty; false when it holds anything, is already gone, or cannot be removed. */
+export const removeEmptyDirectory = async (
+  fileSystem: PublicationFileSystem,
+  directory: string,
+  warn: (message: string) => void,
+): Promise<boolean> => {
+  try {
+    await fileSystem.rmdir(directory);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOTEMPTY" && code !== "EEXIST" && code !== "ENOENT")
+      warn(`Failed to remove empty directory ${directory}: ${error instanceof Error ? error.message : error}`);
+    return false;
+  }
+};
+
 /** Directories one publication created, so a failed one can take back the empty folders it left behind. */
 export class CreatedDirectories {
   readonly #created: Array<{ leaf: string; top: string }> = [];
@@ -52,16 +69,7 @@ export class CreatedDirectories {
   async removeEmpty(warn: (message: string) => void): Promise<void> {
     for (const { leaf, top } of this.#created.toReversed()) {
       for (let current = leaf; ; current = path.dirname(current)) {
-        try {
-          await this.fileSystem.rmdir(current);
-        } catch (error) {
-          // A folder that holds anything, or is already gone, belongs to someone else now.
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code !== "ENOTEMPTY" && code !== "EEXIST" && code !== "ENOENT")
-            warn(`Failed to remove empty directory ${current}: ${error instanceof Error ? error.message : error}`);
-          break;
-        }
-        if (current === top) break;
+        if (!(await removeEmptyDirectory(this.fileSystem, current, warn)) || current === top) break;
       }
     }
   }

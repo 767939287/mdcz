@@ -179,25 +179,89 @@ describe("MoveOutput", () => {
     expect(readdir).toHaveBeenCalledOnce();
     await expect(readFile(secondTarget, "utf8")).resolves.toBe("second");
 
-    // Replaced files leave their old folders empty; those go, but nothing above the folder shared with the new location.
-    const relocated = await fixture();
-    const staleDirectory = path.join(relocated.directory, "old", "ACTOR", "extrafanart");
-    await fs.mkdir(staleDirectory, { recursive: true });
-    const stale = path.join(staleDirectory, "fanart1.jpg");
-    await writeFile(stale, "old");
+    // A scrape removes the download folders it emptied, but never the media root they sit in.
+    const downloaded = await fixture();
+    const downloadFolder = path.join(downloaded.directory, "a", "SNOS-301");
+    await fs.mkdir(downloadFolder, { recursive: true });
+    const downloadedVideo = path.join(downloadFolder, "SNOS-301.mp4");
+    const subtitle = path.join(downloadFolder, "SNOS-301.srt");
+    await fs.rename(downloaded.sourcePath, downloadedVideo);
+    await writeFile(subtitle, "srt");
     await new MoveOutput().install({
-      moves: [relocated.move],
+      moves: [
+        {
+          ...downloaded.move,
+          sourcePath: downloadedVideo,
+          source: { rootId: "root", relativePath: "a/SNOS-301/SNOS-301.mp4" },
+        },
+      ],
       artifacts: [
         {
-          targetPath: path.join(path.dirname(relocated.targetPath), "movie.nfo"),
-          data: "nfo",
-          removeSourcesAfterCommit: [stale],
+          targetPath: path.join(path.dirname(downloaded.targetPath), "SNOS-301.srt"),
+          sourcePath: subtitle,
+          size: 3,
+          removeSourcesAfterCommit: [subtitle],
         },
       ],
       commit: () => undefined,
     });
-    expect(existsSync(path.join(relocated.directory, "old"))).toBe(false);
-    expect(existsSync(relocated.directory)).toBe(true);
+    expect(existsSync(path.join(downloaded.directory, "a"))).toBe(false);
+    expect(existsSync(downloaded.directory)).toBe(true);
+
+    // Reorganizing renames the movie's own folder, carrying files the publication does not know about along.
+    const renamed = await fixture();
+    const oldFolder = path.join(renamed.directory, "Actor", "ABC-123");
+    const newFolder = path.join(renamed.directory, "Actor", "ABC-123-破解");
+    await fs.mkdir(path.join(oldFolder, "extrafanart"), { recursive: true });
+    const oldVideo = path.join(oldFolder, "ABC-123.mp4");
+    const oldNfo = path.join(oldFolder, "ABC-123.nfo");
+    const fanart = path.join(oldFolder, "extrafanart", "fanart1.jpg");
+    await fs.rename(renamed.sourcePath, oldVideo);
+    await writeFile(oldNfo, "old nfo");
+    await writeFile(fanart, "fanart");
+    await writeFile(path.join(oldFolder, "notes.txt"), "mine");
+    const reorganize = (commit: () => void) =>
+      new MoveOutput().install({
+        reorganize: true,
+        moves: [
+          {
+            ...renamed.move,
+            source: { rootId: "root", relativePath: "Actor/ABC-123/ABC-123.mp4" },
+            target: { rootId: "root", relativePath: "Actor/ABC-123-破解/ABC-123-破解.mp4" },
+            sourcePath: oldVideo,
+            targetPath: path.join(newFolder, "ABC-123-破解.mp4"),
+          },
+        ],
+        artifacts: [
+          { targetPath: path.join(newFolder, "ABC-123-破解.nfo"), data: "nfo", removeSourcesAfterCommit: [oldNfo] },
+          {
+            targetPath: path.join(newFolder, "extrafanart", "fanart1.jpg"),
+            sourcePath: fanart,
+            size: 6,
+            removeSourcesAfterCommit: [fanart],
+          },
+        ],
+        commit,
+      });
+    const oldTree = (await fs.readdir(renamed.directory, { recursive: true })).sort();
+    await expect(
+      reorganize(() => {
+        throw new Error("commit failed");
+      }),
+    ).rejects.toThrow("commit failed");
+    expect((await fs.readdir(renamed.directory, { recursive: true })).sort()).toEqual(oldTree);
+    await reorganize(() => undefined);
+    expect((await fs.readdir(renamed.directory, { recursive: true })).sort()).toEqual(
+      [
+        "Actor",
+        "Actor/ABC-123-破解",
+        "Actor/ABC-123-破解/ABC-123-破解.mp4",
+        "Actor/ABC-123-破解/ABC-123-破解.nfo",
+        "Actor/ABC-123-破解/extrafanart",
+        "Actor/ABC-123-破解/extrafanart/fanart1.jpg",
+        "Actor/ABC-123-破解/notes.txt",
+      ].map((name) => name.replaceAll("/", path.sep)),
+    );
   });
 
   it("rejects occupied destinations and changes after initial observation before mutation", async () => {

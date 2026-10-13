@@ -66,6 +66,7 @@ const scenarios: ReplayScenario[] = [
       "source/a/SNOS-301.mp4": "snos",
       "source/b/IPZZ-907.mp4": "ipzz",
       "source/SNOS-334.mp4": "snos334",
+      "source/c/START-608.mp4": "start",
     },
   },
   {
@@ -97,11 +98,11 @@ const describeTree = async (root: string, directory = root): Promise<string[]> =
   const lines: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
+    const name = relative(root, path).replaceAll("\\", "/");
     if (entry.isDirectory()) {
-      lines.push(...(await describeTree(root, path)));
+      lines.push(`${name}/`, ...(await describeTree(root, path)));
       continue;
     }
-    const name = relative(root, path).replaceAll("\\", "/");
     if (imageExtensions.has(extname(name))) {
       const { width, height } = await sharp(path).metadata();
       lines.push(`${name} ${width}x${height}`);

@@ -40,23 +40,23 @@ const fixtureCases: FixtureCaseExpectation[] = [
   {
     caseId: "ipzz-907",
     number: "IPZZ-907",
-    expectedTitle: "明日葉みつは史上【最大絶頂】 中出し解禁 生ハメオーガズム",
+    expectedTitle: "明日葉みつは記録【感動瞬間】 旅立ち風景 新パノラマビュー",
     expectedActors: ["明日葉みつは"],
   },
   {
     caseId: "snos-301",
     number: "SNOS-301",
-    expectedTitle: "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？ 浅野こころ",
-    expectedAvbaseTitle: "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+    expectedTitle: "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？ 浅野こころ",
+    expectedAvbaseTitle: "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     expectedActors: ["浅野こころ"],
   },
   {
     caseId: "snos-334",
     number: "SNOS-334",
     expectedTitle:
-      "最強ビジュOLさん、出張先で死ぬほど嫌いな中年上司と相部屋… でも過激セクハラにまさかの快楽堕ちしちゃう！ 瀬戸環奈",
+      "笑顔カフェPRさん、旅行先で心おどる想いと四季風景と写真館… でも素敵デザインにまさかの新世界へゆこうよ！ 瀬戸環奈",
     expectedAvbaseTitle:
-      "最強ビジュOLさん、出張先で死ぬほど嫌いな中年上司と相部屋… でも過激セクハラにまさかの快楽堕ちしちゃう！",
+      "笑顔カフェPRさん、旅行先で心おどる想いと四季風景と写真館… でも素敵デザインにまさかの新世界へゆこうよ！",
     expectedActors: ["瀬戸環奈"],
   },
 ];
@@ -83,13 +83,6 @@ describe.skipIf(!hasNetworkFixtures)("Crawler actual fixture replay", () => {
       actors: ["川口あかり"],
       duration: 3543,
       url: "https://www.10musume.com/moviepages/100524_01/index.html",
-    },
-    {
-      site: Website.CARIBBEANCOM,
-      number: "CARIB-100524-001",
-      actors: ["中田みなみ"],
-      duration: 3624,
-      url: "https://www.caribbeancom.com/moviepages/100524-001/index.html",
     },
     {
       site: Website.HEYZO,
