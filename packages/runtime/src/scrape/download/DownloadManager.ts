@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { buildMovieAssetFileNames } from "@mdcz/shared/assetNaming";
 import type { Configuration } from "@mdcz/shared/config";
 import type { CrawlerData, DiscoveredAssets, DownloadedAssets } from "@mdcz/shared/types";
@@ -7,6 +8,7 @@ import type { ImageAlternatives } from "../aggregation";
 import { DirectoryInventory } from "../DirectoryInventory";
 import { throwIfAborted } from "../utils/abort";
 import { FanartAssetDownloader } from "./assets/FanartAssetDownloader";
+import { buildImageCandidates } from "./assets/helpers";
 import { PrimaryImageAssetDownloader } from "./assets/PrimaryImageAssetDownloader";
 import { SceneImageAssetDownloader } from "./assets/SceneImageAssetDownloader";
 import { TrailerAssetDownloader } from "./assets/TrailerAssetDownloader";
@@ -71,11 +73,22 @@ export class DownloadManager {
     };
 
     const plan = this.createExecutionPlan(outputDir, data, config, imageAlternatives, callbacks, options);
+    let cover: Promise<string | undefined> | undefined;
     const context: DownloadExecutionContext = {
       plan,
       assets,
       imageDownloader: this.imageDownloader,
       sceneImageDownloader: this.sceneImageDownloader,
+      // outputDir is the publication staging folder, so a cover fetched there only as a source is never published.
+      resolveCover: async () => {
+        if (assets.thumb || config.download.downloadThumb) return assets.thumb;
+        cover ??= this.imageDownloader.downloadBestImage(
+          buildImageCandidates(data.thumb_url, plan.imageAlternatives.thumb_url),
+          join(outputDir, ".mdcz-cover.jpg"),
+          plan.signal,
+        );
+        return await cover;
+      },
       logger: this.logger,
     };
 

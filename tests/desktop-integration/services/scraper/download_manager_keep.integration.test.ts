@@ -415,7 +415,7 @@ describe("DownloadManager keep flags", () => {
     await expect(readFile(scenePath(root, 1), "utf8")).resolves.toBe("old-scene");
   });
 
-  it("only derives secondary artwork when a kept thumb is actually available", async () => {
+  it("derives fanart from the landscape cover whether or not the thumb itself is downloaded", async () => {
     const cases = [
       {
         seed: { "thumb.jpg": "thumb" },
@@ -451,7 +451,11 @@ describe("DownloadManager keep flags", () => {
           networkClient: FakeNetworkClient,
         ) => {
           expect(assets.thumb).toBeUndefined();
-          expect(assets.fanart).toBeUndefined();
+          expect(assets.fanart).toBe(join(root, "fanart.jpg"));
+          await expect(readFile(join(root, "fanart.jpg"), "utf8")).resolves.toBe(
+            "downloaded:https://example.com/thumb.jpg",
+          );
+          await expect(access(join(root, "thumb.jpg"))).rejects.toThrow();
           await expectSceneImages(root, assets, [
             "https://example.com/scene-001.jpg",
             "https://example.com/scene-002.jpg",
@@ -729,42 +733,61 @@ describe("DownloadManager keep flags", () => {
     expect(await readFile(join(root, "published-thumb.webp"))).toEqual(webp);
   });
 
-  it("replaces tiny poster downloads from thumb artwork", async () => {
-    const { root, manager, networkClient } = await createSubject();
-    networkClient.download.mockImplementation(async (url, outputPath) => {
-      if (url.includes("thumb")) {
-        await writeSvgImage(outputPath, { width: 800, height: 500, color: "#4a8bd6" });
-        return outputPath;
-      }
-      if (url.includes("poster")) {
-        await writeSvgImage(outputPath, { width: 120, height: 180, color: "#d64a4a" });
-        return outputPath;
-      }
-      return writeDownloadedFile(outputPath, url);
-    });
-    const validateSpy = vi.spyOn(imageUtils, "validateImage").mockResolvedValue({
-      valid: true,
-      width: 800,
-      height: 500,
-      format: "jpeg",
-    });
-    const data = createCrawlerData({
-      thumb_url: "https://example.com/thumb.jpg",
-      poster_url: "https://example.com/poster.jpg",
-    });
-    const onDerivedPosterSource = vi.fn();
-    const assets = await manager.downloadAll(root, data, primaryOnly(), {}, { onDerivedPosterSource });
-    validateSpy.mockRestore();
-    const cropRegion = resolveThumbToPosterCropRegion(800, 500);
-    expect(assets.poster).toBe(join(root, "poster.jpg"));
-    expect(assets.downloaded).toEqual([join(root, "thumb.jpg"), join(root, "poster.jpg")]);
-    expect(data.poster_source_url).toBeUndefined();
-    expect(onDerivedPosterSource).toHaveBeenCalledWith("https://example.com/thumb.jpg");
-    expect(await imageUtils.validateImage(join(root, "poster.jpg"), 1)).toMatchObject({
-      valid: true,
-      width: cropRegion?.width,
-      height: cropRegion?.height,
-    });
+  it("crops tiny posters and copies fanart from one cover download, with or without the thumb", async () => {
+    for (const downloadThumb of [true, false]) {
+      const { root, manager, networkClient } = await createSubject();
+      networkClient.download.mockImplementation(async (url, outputPath) => {
+        if (url.includes("thumb")) {
+          await writeSvgImage(outputPath, { width: 800, height: 500, color: "#4a8bd6" });
+          return outputPath;
+        }
+        if (url.includes("poster")) {
+          await writeSvgImage(outputPath, { width: 120, height: 180, color: "#d64a4a" });
+          return outputPath;
+        }
+        return writeDownloadedFile(outputPath, url);
+      });
+      const validateSpy = vi.spyOn(imageUtils, "validateImage").mockResolvedValue({
+        valid: true,
+        width: 800,
+        height: 500,
+        format: "jpeg",
+      });
+      const data = createCrawlerData({
+        thumb_url: "https://example.com/thumb.jpg",
+        poster_url: "https://example.com/poster.jpg",
+      });
+      const onDerivedPosterSource = vi.fn();
+      const config = dl({
+        downloadThumb,
+        keepThumb: false,
+        keepPoster: false,
+        downloadFanart: true,
+        keepFanart: false,
+        downloadSceneImages: false,
+        downloadTrailer: false,
+      });
+      const assets = await manager.downloadAll(root, data, config, {}, { onDerivedPosterSource });
+      validateSpy.mockRestore();
+      const cropRegion = resolveThumbToPosterCropRegion(800, 500);
+      expect(assets.poster).toBe(join(root, "poster.jpg"));
+      expect(assets.thumb).toBe(downloadThumb ? join(root, "thumb.jpg") : undefined);
+      expect(assets.fanart).toBe(join(root, "fanart.jpg"));
+      expect(assets.downloaded).toEqual([
+        ...(downloadThumb ? [join(root, "thumb.jpg")] : []),
+        join(root, "poster.jpg"),
+        join(root, "fanart.jpg"),
+      ]);
+      expect(networkClient.download.mock.calls.filter(([url]) => String(url).includes("thumb"))).toHaveLength(1);
+      if (!downloadThumb) await expect(access(join(root, "thumb.jpg"))).rejects.toThrow();
+      expect(data.poster_source_url).toBeUndefined();
+      expect(onDerivedPosterSource).toHaveBeenCalledWith("https://example.com/thumb.jpg");
+      expect(await imageUtils.validateImage(join(root, "poster.jpg"), 1)).toMatchObject({
+        valid: true,
+        width: cropRegion?.width,
+        height: cropRegion?.height,
+      });
+    }
   });
 
   it("keeps a large poster and uses a portrait thumb as the poster", async () => {

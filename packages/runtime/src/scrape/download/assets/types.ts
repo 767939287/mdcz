@@ -46,6 +46,8 @@ export interface DownloadExecutionContext {
   assets: DownloadedAssets;
   imageDownloader: ImageDownloadService;
   sceneImageDownloader: SceneImageDownloader;
+  /** The landscape cover that fanart and small-poster crops come from: the thumb, or with thumbs off a one-time download. */
+  resolveCover(): Promise<string | undefined>;
   logger: {
     info(message: string): void;
     warn(message: string): void;

@@ -15,43 +15,38 @@ export class FanartAssetDownloader implements AssetDownloader {
     throwIfAborted(plan.signal);
 
     const fanartTargetPath = join(plan.outputDir, plan.assetFileNames.fanart);
+    const existingTargetPath = join(plan.existingAssetDir, plan.assetFileNames.fanart);
     const thumbPath = assets.thumb;
-
-    if (thumbPath) {
-      const thumbWasRefreshed = assets.downloaded.includes(thumbPath) || plan.forceReplace.fanart;
-      const keepFanart = shouldKeepAsset(
-        plan.assetDecisions.fanart,
-        thumbWasRefreshed ? false : plan.config.download.keepFanart,
-      );
-      const fanartPath = buildImageAssetPathFromSource(fanartTargetPath, thumbPath);
-      const existingFanart = await resolveExistingImageAsset(
-        plan.existingAssets?.fanart ??
-          buildImageAssetPathFromSource(join(plan.existingAssetDir, plan.assetFileNames.fanart), thumbPath),
-        plan.inventory,
-      );
-
-      if (keepFanart && existingFanart) {
-        assets.fanart = existingFanart;
-        return;
-      }
-
-      const createdPath = await imageDownloader.copyDerivedImage(thumbPath, fanartPath, "fanart");
-      if (createdPath) {
-        assets.fanart = createdPath;
-        assets.downloaded.push(createdPath);
-        return;
-      }
-
-      if (existingFanart && plan.assetDecisions.fanart !== "replace") {
-        assets.fanart = existingFanart;
-      }
+    const existingFanart = await resolveExistingImageAsset(
+      plan.existingAssets?.fanart ??
+        (thumbPath ? buildImageAssetPathFromSource(existingTargetPath, thumbPath) : existingTargetPath),
+      plan.inventory,
+    );
+    const sourceRefreshed =
+      plan.forceReplace.fanart || (thumbPath !== undefined && assets.downloaded.includes(thumbPath));
+    if (
+      existingFanart &&
+      shouldKeepAsset(plan.assetDecisions.fanart, sourceRefreshed ? false : plan.config.download.keepFanart)
+    ) {
+      assets.fanart = existingFanart;
       return;
     }
 
-    const existingFanart = await resolveExistingImageAsset(
-      plan.existingAssets?.fanart ?? join(plan.existingAssetDir, plan.assetFileNames.fanart),
-      plan.inventory,
-    );
+    // Fanart has no source of its own: it is a copy of the landscape cover.
+    const coverPath = await context.resolveCover();
+    const createdPath = coverPath
+      ? await imageDownloader.copyDerivedImage(
+          coverPath,
+          buildImageAssetPathFromSource(fanartTargetPath, coverPath),
+          "fanart",
+        )
+      : undefined;
+    if (createdPath) {
+      assets.fanart = createdPath;
+      assets.downloaded.push(createdPath);
+      return;
+    }
+
     if (existingFanart && plan.assetDecisions.fanart !== "replace") {
       assets.fanart = existingFanart;
     }

@@ -18,7 +18,8 @@ interface PosterDerivationLogger {
 export interface DerivePosterFromThumbOptions {
   posterPath: string | undefined;
   targetPath: string;
-  thumbPath: string | undefined;
+  /** Called only once the poster needs replacing, so a cover fetched just for the crop is not fetched in vain. */
+  resolveThumbPath: () => Promise<string | undefined>;
 }
 
 const inferOutputExtension = (filePath: string): string => extname(filePath) || ".jpg";
@@ -50,7 +51,8 @@ export class PosterImageDerivationService {
       }
     }
 
-    if (!options.thumbPath) {
+    const thumbPath = await options.resolveThumbPath();
+    if (!thumbPath) {
       this.logger.warn(`Cannot derive poster from thumb: thumb asset is missing for ${options.targetPath}`);
       return { status: "skipped", reason: "missing_thumb" };
     }
@@ -59,12 +61,12 @@ export class PosterImageDerivationService {
 
     try {
       // libvips can cache an open WebP file on Windows, preventing the subsequent publication rename.
-      const source = sharp(await readFile(options.thumbPath), { animated: false }).rotate();
+      const source = sharp(await readFile(thumbPath), { animated: false }).rotate();
       const metadata = await source.metadata();
       const width = metadata.width ?? 0;
       const height = metadata.height ?? 0;
       if (width <= 0 || height <= 0) {
-        throw new Error(`Unable to read thumb dimensions for ${options.thumbPath}`);
+        throw new Error(`Unable to read thumb dimensions for ${thumbPath}`);
       }
 
       // A portrait cover is already poster-shaped and is used whole.
@@ -86,7 +88,7 @@ export class PosterImageDerivationService {
 
       return { status: "derived", path: outputPath };
     } catch (error) {
-      this.logger.warn(`Failed to derive poster from thumb ${options.thumbPath}: ${toErrorMessage(error)}`);
+      this.logger.warn(`Failed to derive poster from thumb ${thumbPath}: ${toErrorMessage(error)}`);
       return { status: "skipped", reason: options.posterPath ? "unreadable_poster" : "missing_thumb" };
     }
   }
