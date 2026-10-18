@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   cn,
+  copyText,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -676,7 +677,7 @@ function LibraryFileActions({ entry, file, onOpenFolder, onRemoveFile, onRelinkF
             className={menuItemClass}
             onClick={() => {
               setMenuOpen(false);
-              navigator.clipboard.writeText(path).catch((cause) => toast.error(String(cause)));
+              copyText(path).catch((cause) => toast.error(String(cause)));
             }}
             type="button"
             variant="ghost"

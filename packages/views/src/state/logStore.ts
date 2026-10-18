@@ -1,4 +1,5 @@
 import type { RuntimeLog } from "@mdcz/shared/runtimeLog";
+import { randomId } from "@mdcz/ui";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
@@ -10,7 +11,7 @@ export const createRuntimeLog = (
   timestamp: string | number = new Date().toISOString(),
 ): RuntimeLog => {
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     timestamp: typeof timestamp === "number" ? new Date(timestamp).toISOString() : timestamp,
     level,
     message,
