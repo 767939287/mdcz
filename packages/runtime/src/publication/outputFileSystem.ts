@@ -14,7 +14,31 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { PublicationFileSystem } from "./types";
+
+const WINDOWS_LOCK_CODES = new Set(["EACCES", "EBUSY", "EPERM"]);
+const WINDOWS_LOCK_RETRY_MS = 10_000;
+
+// Antivirus, the search indexer and SMB servers briefly hold files open on Windows, failing renames and deletes
+// with EPERM/EBUSY/EACCES. Retrying with VS Code's backoff rides those out; a lasting lock still fails within the budget.
+const retryWhileLocked = async (operation: () => Promise<void>, canRetry: () => Promise<boolean>): Promise<void> => {
+  const startedAt = Date.now();
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        process.platform !== "win32" ||
+        !WINDOWS_LOCK_CODES.has((error as NodeJS.ErrnoException).code ?? "") ||
+        Date.now() - startedAt >= WINDOWS_LOCK_RETRY_MS ||
+        !(await canRetry())
+      )
+        throw error;
+      await delay(Math.min(100, attempt * 10));
+    }
+  }
+};
 
 export const outputFileSystem: PublicationFileSystem = {
   copyFile,
@@ -23,8 +47,21 @@ export const outputFileSystem: PublicationFileSystem = {
   mkdir,
   rmdir,
   readdir,
-  rename,
-  rm,
+  // A rename is retried only while its target stays absent, so a retry never replaces a file that appeared meanwhile.
+  rename: async (source, target) =>
+    await retryWhileLocked(
+      async () => await rename(source, target),
+      async () =>
+        await lstat(target).then(
+          () => false,
+          (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+        ),
+    ),
+  rm: async (filePath, options) =>
+    await retryWhileLocked(
+      async () => await rm(filePath, options),
+      async () => true,
+    ),
   stat,
   lstat,
   writeFile,
