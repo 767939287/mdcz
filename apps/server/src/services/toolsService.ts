@@ -1,18 +1,8 @@
 import { registeredMediaLocations } from "@mdcz/runtime";
-import type { ActorSourceProvider } from "@mdcz/runtime/actorSource";
 import type { CrawlerProvider } from "@mdcz/runtime/crawler";
 import { resolveDesktopInputRootPath } from "@mdcz/runtime/library";
 import { LocalScanService, writePreparedNfo } from "@mdcz/runtime/maintenance";
-import {
-  checkEmbyConnection,
-  checkJellyfinConnection,
-  EmbyActorInfoService,
-  EmbyActorPhotoService,
-  JellyfinActorInfoService,
-  JellyfinActorPhotoService,
-  type MediaServerKey,
-  type MediaServerSignalService,
-} from "@mdcz/runtime/mediaserver";
+import { checkEmbyConnection, checkJellyfinConnection } from "@mdcz/runtime/mediaserver";
 import type { NetworkClient } from "@mdcz/runtime/network";
 import { AggregationService, LlmApiClient, NfoGenerator, TranslateService, toTarget } from "@mdcz/runtime/scrape";
 import { runtimeLoggerService } from "@mdcz/runtime/shared";
@@ -32,22 +22,14 @@ import type { MediaRootService } from "./mediaRootService";
 import type { ServerPersistenceService } from "./persistenceService";
 import type { ScrapeService } from "./scrapeService";
 
-const noopMediaServerSignal: MediaServerSignalService = {
-  resetProgress: () => undefined,
-  setProgress: () => undefined,
-  showLogText: () => undefined,
-};
-
 export interface ToolsServiceDependencies {
   networkClient: NetworkClient;
   crawlerProvider: CrawlerProvider;
-  actorSourceProvider: ActorSourceProvider;
 }
 
 export class ToolsService {
   private readonly networkClient: NetworkClient;
   private readonly crawlerProvider: CrawlerProvider;
-  private readonly actorSourceProvider: ActorSourceProvider;
   private readonly translate: TranslateService;
   private readonly localScanService = new LocalScanService(async (paths) => {
     const state = await this.persistence.getState();
@@ -64,7 +46,6 @@ export class ToolsService {
     deps: ToolsServiceDependencies,
   ) {
     this.networkClient = deps.networkClient;
-    this.actorSourceProvider = deps.actorSourceProvider;
     this.crawlerProvider = deps.crawlerProvider;
     this.translate = new TranslateService(deps.networkClient);
     this.llmApiClient = new LlmApiClient(deps.networkClient);
@@ -100,20 +81,9 @@ export class ToolsService {
         return { toolId: input.toolId, ok: true, data: result };
       }
       case "media-library-tools": {
-        const server = input.server ?? "jellyfin";
-        const action = input.action ?? "check";
-        const mode = input.mode ?? "missing";
-        if (action === "sync-info" || action === "sync-photo") {
-          const config = await this.config.get();
-          const result =
-            action === "sync-info"
-              ? await this.createActorInfoService(server).run(config, mode)
-              : await this.createActorPhotoService(server).run(config, mode);
-          return { toolId: input.toolId, ok: result.failedCount === 0, data: result };
-        }
         const config = await this.config.get();
         const check =
-          server === "emby"
+          input.server === "emby"
             ? await checkEmbyConnection(this.networkClient, config)
             : await checkJellyfinConnection(this.networkClient, config);
         return { toolId: input.toolId, ok: check.success, data: check };
@@ -195,24 +165,5 @@ export class ToolsService {
         return { toolId: input.toolId, ok: true, data: { items } };
       }
     }
-  }
-
-  private actorServiceDeps(server: MediaServerKey) {
-    return {
-      signalService: noopMediaServerSignal,
-      networkClient: this.networkClient,
-      actorSourceProvider: this.actorSourceProvider,
-      logger: runtimeLoggerService.getLogger(server === "emby" ? "EmbyActorSync" : "JellyfinActorSync"),
-    };
-  }
-
-  private createActorInfoService(server: MediaServerKey) {
-    const deps = this.actorServiceDeps(server);
-    return server === "emby" ? new EmbyActorInfoService(deps) : new JellyfinActorInfoService(deps);
-  }
-
-  private createActorPhotoService(server: MediaServerKey) {
-    const deps = this.actorServiceDeps(server);
-    return server === "emby" ? new EmbyActorPhotoService(deps) : new JellyfinActorPhotoService(deps);
   }
 }

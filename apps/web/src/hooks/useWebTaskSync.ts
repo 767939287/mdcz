@@ -116,7 +116,7 @@ export const useWebTaskSync = (): void => {
       },
       onNotification: (payload) => {
         recordDispatch();
-        if (payload.kind === "log") return;
+        if (payload.kind !== "invalidate") return;
         if (payload.resources.includes("ready")) {
           refreshLiveRuns();
           refreshMaintenanceSession();

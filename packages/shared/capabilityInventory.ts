@@ -402,6 +402,8 @@ export const SERVER_ONLY_PROCEDURES = [
   { path: "system.about", reason: "Server product/about surface; desktop App_Info is process identity." },
   { path: "tools.catalog", reason: "Tool_* family is N:2; deferred from 1:1 manifest." },
   { path: "tools.execute", reason: "Tool_* family is N:2; deferred from 1:1 manifest." },
+  { path: "tools.startPersonSync", reason: "Desktop syncs persons through blocking Tool_* IPC with live signals." },
+  { path: "tools.personSyncStatus", reason: "Desktop syncs persons through blocking Tool_* IPC with live signals." },
 ] as const satisfies readonly ClassifiedServerProcedure[];
 
 type ClassifiedDesktopChannel =

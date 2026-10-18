@@ -63,6 +63,7 @@ export const LogsPage = () => {
             }
             return;
           }
+          if (event.kind !== "log") return;
           if (activeTaskIds.length > 0 && event.log.source === "task" && !activeTaskIds.includes(event.log.taskId)) {
             return;
           }

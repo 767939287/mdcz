@@ -614,12 +614,34 @@ export const scrapeMutationAckSchema = z.object({
 
 export type ScrapeMutationAckDto = z.infer<typeof scrapeMutationAckSchema>;
 
+export const personSyncStartInputSchema = z.object({
+  server: z.enum(["emby", "jellyfin"]),
+  kind: z.enum(["info", "photo"]),
+  mode: z.enum(["all", "missing"]),
+});
+
+export type PersonSyncStartInput = z.infer<typeof personSyncStartInputSchema>;
+
+export const personSyncJobSchema = personSyncStartInputSchema.extend({
+  id: z.string(),
+  status: z.enum(["running", "completed", "failed"]),
+  current: z.number().int(),
+  total: z.number().int(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
+  result: z.object({ processedCount: z.number(), failedCount: z.number(), skippedCount: z.number() }).nullable(),
+  error: z.string().nullable(),
+});
+
+export type PersonSyncJobDto = z.infer<typeof personSyncJobSchema>;
+
 export const taskNotificationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("invalidate"),
     resources: z.array(z.enum(["ready", "scan", "scrape-live", "scrape-history", "maintenance", "pending"])),
   }),
   z.object({ kind: z.literal("log"), log: logEntrySchema }),
+  z.object({ kind: z.literal("person-sync"), job: personSyncJobSchema }),
 ]);
 
 export type TaskNotificationDto = z.infer<typeof taskNotificationSchema>;
@@ -1204,8 +1226,6 @@ export const toolExecuteInputSchema = z.discriminatedUnion("toolId", [
   z.object({
     toolId: z.literal("media-library-tools"),
     server: z.enum(["emby", "jellyfin"]).default("jellyfin"),
-    action: z.enum(["check", "sync-info", "sync-photo"]).optional().default("check"),
-    mode: z.enum(["all", "missing"]).optional().default("missing"),
   }),
   z.object({
     toolId: z.literal("symlink-manager"),

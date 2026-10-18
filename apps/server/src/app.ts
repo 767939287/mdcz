@@ -36,6 +36,7 @@ import { LibraryWatchService } from "./services/libraryWatchService";
 import { MaintenanceService } from "./services/maintenanceService";
 import { MediaRootService } from "./services/mediaRootService";
 import { ServerPersistenceService } from "./services/persistenceService";
+import { PersonSyncService } from "./services/personSyncService";
 import { QbittorrentService } from "./services/qbittorrentService";
 import { RuntimeActionService } from "./services/runtimeActionService";
 import { RuntimeLogService } from "./services/runtimeLogService";
@@ -208,6 +209,8 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     maintenance,
     mediaRoots,
     persistence,
+    personSync:
+      options.services?.personSync ?? new PersonSyncService(config, taskEvents, { networkClient, actorSourceProvider }),
     runtimeLogs,
     runtimeActions:
       options.services?.runtimeActions ?? new RuntimeActionService(config, networkClient, crawlerProvider),
@@ -231,7 +234,6 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       new ToolsService(config, mediaRoots, scrape, persistence, {
         networkClient,
         crawlerProvider,
-        actorSourceProvider,
       }),
   };
   const fastify = Fastify({

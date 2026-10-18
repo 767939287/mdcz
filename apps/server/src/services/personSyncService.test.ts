@@ -1,13 +1,11 @@
 import type { ActorLookupResult, ActorSourceProvider } from "@mdcz/runtime/actorSource";
-import type { CrawlerProvider } from "@mdcz/runtime/crawler";
 import type { NetworkClient } from "@mdcz/runtime/network";
 import { defaultConfiguration } from "@mdcz/shared/config";
+import type { PersonSyncJobDto } from "@mdcz/shared/serverDtos";
 import { describe, expect, it, vi } from "vitest";
+import { createTaskEventBus } from "../taskEvents";
 import type { ServerConfigService } from "./configService";
-import type { MediaRootService } from "./mediaRootService";
-import type { ServerPersistenceService } from "./persistenceService";
-import type { ScrapeService } from "./scrapeService";
-import { ToolsService } from "./toolsService";
+import { PersonSyncService } from "./personSyncService";
 
 const JELLYFIN_USER_ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -59,55 +57,70 @@ class FakeActorSourceProvider {
   );
 }
 
-const createTools = (networkClient: FakeNetworkClient, actorSourceProvider: FakeActorSourceProvider) =>
-  new ToolsService(config, {} as MediaRootService, {} as ScrapeService, {} as ServerPersistenceService, {
+const createSubject = (networkClient = new FakeNetworkClient()) => {
+  const actorSourceProvider = new FakeActorSourceProvider();
+  const taskEvents = createTaskEventBus();
+  const published: PersonSyncJobDto[] = [];
+  taskEvents.subscribe((notification) => {
+    if (notification.kind === "person-sync") published.push(notification.job);
+  });
+  const service = new PersonSyncService(config, taskEvents, {
     networkClient: networkClient as unknown as NetworkClient,
-    crawlerProvider: { listSites: () => [] } as unknown as CrawlerProvider,
     actorSourceProvider: actorSourceProvider as unknown as ActorSourceProvider,
   });
+  const settled = async () => {
+    await expect.poll(() => service.status()?.status).not.toBe("running");
+    return service.status();
+  };
+  return { actorSourceProvider, networkClient, published, service, settled };
+};
 
-describe("ToolsService person sync", () => {
-  it("syncs jellyfin actor info through the actor source provider", async () => {
-    const networkClient = new FakeNetworkClient();
-    const actorSourceProvider = new FakeActorSourceProvider();
-    const tools = createTools(networkClient, actorSourceProvider);
+describe("PersonSyncService", () => {
+  it("runs one sync in the background, joins repeat starts, and publishes its outcome", async () => {
+    const { actorSourceProvider, networkClient, published, service, settled } = createSubject();
 
-    const response = await tools.execute({
-      toolId: "media-library-tools",
-      server: "jellyfin",
-      action: "sync-info",
-      mode: "missing",
+    const started = service.start({ server: "jellyfin", kind: "info", mode: "missing" });
+    const joined = service.start({ server: "jellyfin", kind: "photo", mode: "all" });
+
+    expect(started).toMatchObject({ status: "running", kind: "info", result: null });
+    expect(joined.id).toBe(started.id);
+    expect(service.status()?.id).toBe(started.id);
+
+    const finished = await settled();
+    expect(finished).toMatchObject({
+      id: started.id,
+      status: "completed",
+      result: { processedCount: 1, skippedCount: 0, failedCount: 0 },
+      error: null,
     });
-
+    expect(finished?.finishedAt).not.toBeNull();
+    expect(published.at(0)?.status).toBe("running");
+    expect(published.at(-1)).toEqual(finished);
     expect(actorSourceProvider.lookup).toHaveBeenCalledWith(configuration, "Actor A");
-    expect(response).toMatchObject({
-      ok: true,
-      data: { processedCount: 1, skippedCount: 0, failedCount: 0 },
-    });
     const payload = JSON.parse(String(networkClient.postText.mock.calls[0]?.[1] ?? "{}")) as { Overview?: string };
     expect(payload.Overview).toContain("Actor biography");
   });
 
-  it("syncs jellyfin actor photos through the actor source provider", async () => {
+  it("keeps a failed sync as the last job and lets the next start run a new one", async () => {
     const networkClient = new FakeNetworkClient();
-    const actorSourceProvider = new FakeActorSourceProvider();
-    const tools = createTools(networkClient, actorSourceProvider);
+    networkClient.getJson.mockRejectedValueOnce(new Error("Jellyfin is offline"));
+    const { actorSourceProvider, service, settled } = createSubject(networkClient);
 
-    const response = await tools.execute({
-      toolId: "media-library-tools",
-      server: "jellyfin",
-      action: "sync-photo",
-      mode: "missing",
+    const failed = service.start({ server: "jellyfin", kind: "photo", mode: "missing" });
+    expect(await settled()).toMatchObject({ id: failed.id, status: "failed", result: null });
+    expect(service.status()?.error).toBeTruthy();
+
+    const retried = service.start({ server: "jellyfin", kind: "photo", mode: "missing" });
+    expect(retried.id).not.toBe(failed.id);
+    expect(await settled()).toMatchObject({
+      id: retried.id,
+      status: "completed",
+      result: { processedCount: 1, skippedCount: 0, failedCount: 0 },
     });
-
     expect(actorSourceProvider.lookup).toHaveBeenCalledWith(configuration, {
       name: "Actor A",
       requiredField: "photo_url",
     });
     expect(networkClient.getContent).toHaveBeenCalledWith("https://example.com/actor-a.jpg", expect.anything());
-    expect(response).toMatchObject({
-      ok: true,
-      data: { processedCount: 1, skippedCount: 0, failedCount: 0 },
-    });
   });
 });
