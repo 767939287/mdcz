@@ -8,6 +8,7 @@ export const web = {
   password: "Password",
   loggingIn: "Logging in…",
   login: "Log in",
+  incorrectPassword: "Incorrect administrator password",
 
   // Setup
   initAdminTitle: "Initialize Administrator Account",

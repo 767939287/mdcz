@@ -1,5 +1,5 @@
 import type { CrawlerData } from "@mdcz/shared/types";
-
+import type { ContentType } from "../../scrape/utils/movieClassification";
 import { BaseCrawler } from "../base/BaseCrawler";
 import type { Context, CrawlerInput } from "../base/types";
 import { normalizeFc2Number } from "./helpers";
@@ -17,6 +17,7 @@ import { normalizeFc2Number } from "./helpers";
  * - `generateSearchUrl()` / `parseSearchPage()` / `parseDetailPage()` — site-specific parsing
  */
 export abstract class BaseFc2Crawler extends BaseCrawler {
+  static readonly contentTypes: readonly ContentType[] = ["fc2"];
   protected static readonly FC2_SERIES = "FC2系列";
 
   protected override newContext(input: CrawlerInput): Context {
@@ -37,28 +38,26 @@ export abstract class BaseFc2Crawler extends BaseCrawler {
    * Build common FC2 CrawlerData fields.
    * Subclasses call this and spread the result, overriding only site-specific fields.
    */
-  protected buildFc2Data(
-    context: Context,
-    fields: {
-      title: string;
-      actors?: string[];
-      studio?: string;
-      genres?: string[];
-      thumbUrl?: string;
-      posterUrl?: string;
-      plot?: string;
-      releaseDate?: string;
-      durationSeconds?: number;
-      rating?: number;
-      sceneImageUrls?: string[];
-      trailerUrl?: string;
-    },
-  ): CrawlerData {
+  protected buildFc2Data(fields: {
+    number: string;
+    title: string;
+    actors?: string[];
+    studio?: string;
+    genres?: string[];
+    thumbUrl?: string;
+    posterUrl?: string;
+    plot?: string;
+    releaseDate?: string;
+    durationSeconds?: number;
+    rating?: number;
+    sceneImageUrls?: string[];
+    trailerUrl?: string;
+  }): CrawlerData {
     const studio = fields.studio || undefined;
 
     return {
       title: fields.title,
-      number: this.formatFc2Number(context.number),
+      number: fields.number ? this.formatFc2Number(normalizeFc2Number(fields.number)) : "",
       actors: fields.actors ?? [],
       genres: fields.genres ?? [],
       studio,

@@ -1,5 +1,9 @@
 import { MaintenanceSession } from "@mdcz/runtime/maintenance";
-import { getWorkbenchSessionSnapshot, resetScrapeWorkbenchToSetup } from "@mdcz/views/adapters/workbenchSession";
+import {
+  getWorkbenchSessionSnapshot,
+  openNewWorkbenchTask,
+  resetScrapeWorkbenchToSetup,
+} from "@mdcz/views/adapters/workbenchSession";
 import {
   changeMaintenancePreset,
   selectMaintenanceEntries,
@@ -9,7 +13,7 @@ import {
 import { selectScrapeResults, useScrapeStore } from "@mdcz/views/state/scrapeStore";
 import { useUIStore } from "@mdcz/views/state/uiStore";
 import { useWorkbenchTaskStore } from "@mdcz/views/state/workbenchTaskStore";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildFailedScrapeSnapshot, buildScrapeSnapshot } from "./scrapeTestSupport";
 
 describe("workbench session scrape setup", () => {
@@ -96,5 +100,27 @@ describe("workbench session scrape setup", () => {
     useMaintenanceStore.getState().setSnapshot(completed);
     expect(useMaintenanceStore.getState().snapshot).toBeNull();
     expect(useMaintenanceStore.getState().presetId).toBe("local_organize");
+  });
+
+  it("opens a new task from Overview over a finished result but never over a preview awaiting review", async () => {
+    const discard = vi.fn(async () => undefined);
+    useScrapeStore.getState().setSnapshot(buildScrapeSnapshot());
+    await openNewWorkbenchTask("maintenance", discard);
+    expect(getWorkbenchSessionSnapshot("scrape").showSetup).toBe(true);
+    expect(useUIStore.getState().workbenchMode).toBe("maintenance");
+    expect(discard).not.toHaveBeenCalled();
+
+    const session = new MaintenanceSession({
+      id: "maintenance-2",
+      rootId: "root-1",
+      presetId: "import_local",
+      refs: [{ rootId: "root-1", relativePath: "one.mp4" }],
+    });
+    session.startRunning();
+    session.finish("completed", null);
+    useMaintenanceStore.getState().setSnapshot(session.snapshot());
+    await openNewWorkbenchTask("scrape", discard);
+    expect(useMaintenanceStore.getState().snapshot).not.toBeNull();
+    expect(discard).not.toHaveBeenCalled();
   });
 });

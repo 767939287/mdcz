@@ -16,41 +16,33 @@ export interface SectionText {
 const PRIORITY_ALIASES = ["aggregation", "priority"];
 
 const sections: Record<FieldAnchor, SectionText> = {
-  paths: {
-    label: "Library & output",
-    aliases: [
-      "path",
-      "paths",
-      "folder",
-      "directory",
-      "directories",
-      "media",
-      "output",
-      "move",
-      "rename",
-      "behavior",
-      "file",
-    ],
-  },
+  paths: { label: "Paths", aliases: ["path", "paths", "folder", "directory", "directories", "exclude", "actor photo"] },
   scrape: { label: "Scraping", aliases: ["scrape", "crawler", "site", "sites", "source", "sources", "rate", "limit"] },
   network: { label: "Network", aliases: ["network", "proxy", "cookie", "retry", "timeout"] },
   translate: { label: "Translation", aliases: ["translate", "translation", "translator", "llm", "language"] },
   naming: { label: "Naming", aliases: ["naming", "name", "template", "rule", "rules"] },
   download: { label: "Downloads", aliases: ["download", "asset", "poster", "fanart", "nfo"] },
   mediaServer: { label: "Media servers", aliases: ["media server", "jellyfin", "emby", "person", "actor"] },
+  automation: {
+    label: "Integrations",
+    aliases: [
+      "integration",
+      "automation",
+      "downloader",
+      "qbittorrent",
+      "clouddrive",
+      "api key",
+      "webhook",
+      "telegram",
+      "bark",
+      "ntfy",
+      "notification",
+    ],
+  },
   system: { label: "Interface & shortcuts", aliases: ["system", "ui", "interface", "shortcut", "hotkey"] },
 };
 
 const fields: Record<FieldKey, FieldText> = {
-  "watch.enabled": {
-    label: "Automatically scrape new media",
-    description:
-      "Server only. Watch the media directory; files already present at startup or after changing watch settings become the baseline and require manual scraping.",
-  },
-  "watch.intervalMinutes": {
-    label: "Scan interval (minutes)",
-    description: "New files are submitted after their size and modification time remain unchanged across two scans.",
-  },
   "translate.deeplApiKey": {
     label: "DeepL API key",
     description: "Free keys ending in :fx use the Free API; other keys use the Pro API.",
@@ -72,37 +64,10 @@ const fields: Record<FieldKey, FieldText> = {
     label: "Baidu translation API key",
     description: "Create it under API Key Management in the console.",
   },
-  "paths.mediaPath": { label: "Media directory", aliases: ["media", "library"] },
   "paths.defaultScanExcludeDirs": {
     label: "Excluded directories",
     description: "These folders are skipped automatically when scanning the library.",
     aliases: ["scan exclude", "exclude dirs"],
-  },
-  "behavior.successFileMove": {
-    label: "Move videos and subtitles",
-    description:
-      "After a successful scrape, move videos and subtitles into the output directory; when off, they stay where they are.",
-  },
-  "paths.successOutputFolder": {
-    label: "Output directory",
-    description:
-      "Where moved files are stored. Absolute or relative paths are supported (empty keeps them under the media directory).",
-    aliases: ["output", "success"],
-  },
-  "behavior.successFileRename": {
-    label: "Rename videos and subtitles",
-    description: "Rename videos and subtitles using the naming rules; when off, original file names are kept.",
-  },
-  "behavior.metadataOnly": {
-    label: "Metadata only",
-    description:
-      "Leave the original videos in place and export posters and NFO files to a separate directory as an archive. The directory contains no videos, so media servers cannot use it as a library.",
-    aliases: ["metadata", "only", "read-only", "archive"],
-  },
-  "paths.metadataPath": {
-    label: "Metadata output directory",
-    description: "Directory that stores NFO files and posters.",
-    aliases: ["metadata", "sidecar"],
   },
   "paths.actorPhotoFolder": {
     label: "Local actor photo directory",
@@ -170,6 +135,7 @@ const fields: Record<FieldKey, FieldText> = {
   "network.proxyType": { label: "Proxy type" },
   "network.proxy": { label: "Proxy address" },
   "network.useProxy": { label: "Use proxy" },
+  "network.directSites": { label: "Direct sites (bypass proxy)" },
   "network.timeout": { label: "Timeout (s)" },
   "network.retryCount": { label: "Retry count" },
   "network.javdbUrl": {
@@ -356,9 +322,6 @@ const fields: Record<FieldKey, FieldText> = {
   "download.keepFanart": { label: "Keep existing fanart" },
   "download.keepSceneImages": { label: "Keep existing scene images" },
   "download.keepTrailer": { label: "Keep existing trailer" },
-  "download.keepNfo": { label: "Keep existing NFO" },
-  "naming.folderTemplate": { label: "Folder template", aliases: ["template", "folder naming"] },
-  "naming.fileTemplate": { label: "File name template", aliases: ["template", "file naming"] },
   "titleRepair.enabled": {
     label: "Restore masked words in titles and plots",
     description:
@@ -397,11 +360,6 @@ const fields: Record<FieldKey, FieldText> = {
   "naming.partStyle": {
     label: "Part style",
     description: "Keep the original suffix of multi-part videos, or rewrite it as CD / PART / DISC.",
-  },
-  "aggregation.behavior.preferLongerPlot": {
-    label: "Prefer longer plot",
-    description: "When several sites provide a plot, prefer the most informative one.",
-    aliases: ["aggregation", "plot", "prefer longer"],
   },
   "aggregation.behavior.maxSceneImages": {
     label: "Maximum scene images",
@@ -488,6 +446,64 @@ const fields: Record<FieldKey, FieldText> = {
     label: "Refresh people after sync",
     description: "After syncing overviews or photos, also ask Emby to refresh person metadata and images.",
   },
+  "emby.notifyAfterPublish": {
+    label: "Refresh folder after organizing",
+    description:
+      "After a movie is organized into the library, ask Emby to scan just that folder so it appears without a full library refresh.",
+  },
+  "jellyfin.notifyAfterPublish": {
+    label: "Refresh folder after organizing",
+    description:
+      "After a movie is organized into the library, ask Jellyfin to scan just that folder so it appears without a full library refresh.",
+  },
+  "automation.pathMappings": {
+    label: "Downloader path mappings",
+    description:
+      "When the downloader runs in another container or host, translate the paths it reports into paths MDCz can read. The longest matching prefix wins.",
+    aliases: ["remote path", "docker", "qbittorrent"],
+  },
+  "automation.qbittorrent.url": {
+    label: "qBittorrent web UI URL",
+    description: "For example http://qbittorrent:8080. Leave empty to stop polling.",
+    aliases: ["qbittorrent", "downloader", "torrent"],
+  },
+  "automation.qbittorrent.apiKey": {
+    label: "qBittorrent API key",
+    description: "qBittorrent 5.2 or newer. Used instead of the username and password.",
+  },
+  "automation.qbittorrent.username": {
+    label: "qBittorrent username",
+    description: "For older versions. Leave empty if qBittorrent skips authentication for MDCz's address.",
+  },
+  "automation.qbittorrent.password": { label: "qBittorrent password" },
+  "automation.qbittorrent.category": {
+    label: "Category",
+    description:
+      "MDCz processes completed torrents in this category only. Its save path must be inside a library's source directory. Avoid sharing this category or path with tools like MoviePilot to prevent file conflicts.",
+  },
+  "notifications.webhookUrl": {
+    label: "Webhook URL",
+    description: "Receives every task start and finish as JSON.",
+    aliases: ["webhook"],
+  },
+  "notifications.webhookSecret": {
+    label: "Webhook secret",
+    description: "Sent in the x-mdcz-webhook-secret header.",
+  },
+  "notifications.channels": {
+    label: "Notification channels",
+    description: "Send a notification when a scrape finishes, and the daily digest when enabled.",
+  },
+  "notifications.telegramBotToken": { label: "Telegram bot token" },
+  "notifications.telegramChatId": { label: "Telegram chat ID" },
+  "notifications.barkUrl": { label: "Bark URL", description: "Your Bark push URL, including the device key." },
+  "notifications.ntfyUrl": { label: "ntfy topic URL", description: "For example https://ntfy.sh/your-topic." },
+  "notifications.ntfyToken": { label: "ntfy access token", description: "Leave empty for public topics." },
+  "notifications.dailyDigest": {
+    label: "Daily digest",
+    description: "Once a day, report the movies added in the last day and how many files are pending.",
+  },
+  "notifications.digestHour": { label: "Digest hour (0-23)", description: "Server local time." },
   "shortcuts.startOrStopScrape": {
     label: "Start/stop scraping",
     description: "Example: S",

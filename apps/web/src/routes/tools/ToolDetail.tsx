@@ -81,6 +81,7 @@ export const ToolDetail = ({ toolId }: { toolId: ToolId }) => {
   const [embyCheckResult, setEmbyCheckResult] = useState<MediaServerConnectionCheckResult | null>(null);
   const [lastPersonSync, setLastPersonSync] = useState<{ server: PersonServer; result: PersonSyncResult } | null>(null);
   const rootsQ = useQuery({ queryKey: queryKeys.mediaRoots.list, queryFn: () => api.mediaRoots.list(), retry: false });
+  const librariesQ = useQuery({ queryKey: queryKeys.libraries.all, queryFn: () => api.libraries.list(), retry: false });
   const browserQ = useQuery({
     queryKey: queryKeys.browser.list(singleFileRootId),
     queryFn: () => api.browser.list({ rootId: singleFileRootId, relativePath: "" }),
@@ -120,6 +121,7 @@ export const ToolDetail = ({ toolId }: { toolId: ToolId }) => {
           <SingleFileScraperDetail
             browserEntries={browserEntries}
             roots={roots}
+            libraries={librariesQ.data?.libraries ?? []}
             state={state}
             workbenchLink={
               <AppLink className="text-sm font-medium underline-offset-4 hover:underline" to="/workbench">
@@ -140,14 +142,14 @@ export const ToolDetail = ({ toolId }: { toolId: ToolId }) => {
       {toolId === "batch-nfo-translator" && (
         <BatchNfoTranslatorWorkspaceDetail
           items={batchItems}
-          onApply={async (items, batchSize) => {
-            const response = await executeM.mutateAsync({ toolId, action: "apply", batchSize, items });
+          onApply={async (items, batchSize, mode) => {
+            const response = await executeM.mutateAsync({ toolId, action: "apply", mode, batchSize, items });
             const data = response.data as { results?: BatchTranslateApplyResultItem[] } | undefined;
             return data?.results ?? [];
           }}
           scanning={executeM.isPending && executeM.variables?.toolId === toolId && executeM.variables.action === "scan"}
-          onScan={async (directory) => {
-            const response = await executeM.mutateAsync({ toolId, action: "scan", directory });
+          onScan={async (directory, mode) => {
+            const response = await executeM.mutateAsync({ toolId, action: "scan", mode, directory });
             const data = response.data as { items?: BatchTranslateScanItem[] } | undefined;
             setBatchItems(data?.items ?? []);
           }}

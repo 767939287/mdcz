@@ -1,23 +1,26 @@
 import { dirname, join } from "node:path";
 import { filesystemPathKey, type MediaRoot, resolveRootRelativePath } from "@mdcz/media-store";
-import type { LibraryRepository, ScrapeRunManifest, ScrapeRunRecord, ScrapeRunRepository } from "@mdcz/persistence";
+import type {
+  DownloaderRepository,
+  LibraryRepository,
+  MediaLibraryRecord,
+  MediaLibraryRepository,
+  PendingRepository,
+  ScrapeRunManifest,
+  ScrapeRunRecord,
+  ScrapeRunRepository,
+} from "@mdcz/persistence";
 import type { Configuration } from "@mdcz/shared/config";
-import {
-  type DirectorySource,
-  type DirectoryTaskScope,
-  type DiscoveryProgress,
-  directoryTaskScopeSchema,
-} from "@mdcz/shared/directoryTasks";
+import { type DirectoryTaskScope, type DiscoveryProgress, directoryTaskScopeSchema } from "@mdcz/shared/directoryTasks";
 import { toErrorMessage } from "@mdcz/shared/error";
 import { resolveManualScrapeRoute } from "@mdcz/shared/manualScrapeUrl";
+import type { PublicationTarget } from "@mdcz/shared/mediaLibrary";
 import type { RootFileRef } from "@mdcz/shared/mediaRef";
 import type {
-  ScrapeConfirmUncensoredInput,
   ScrapeHistoryResponse,
   ScrapeHistoryRunDto,
   ScrapeLiveItemDto,
   ScrapeLiveRunsResponse,
-  ScrapePendingUncensoredConfirmationResponse,
   ScrapeResultDetailResponse,
   ScrapeResultDto,
   ScrapeRunSnapshotDto,
@@ -31,14 +34,14 @@ import type {
   NfoLocalState,
   ScrapeResult,
   UncensoredChoice,
-  UncensoredConfirmResponse,
 } from "@mdcz/shared/types";
+import { toPublicationTarget } from "../library/mediaLibraryService";
 import type { ConfiguredMediaRootService } from "../library/mediaRootService";
-import { MaintenanceRuntime } from "../maintenance/MaintenanceRuntime";
 import { buildMovieTags } from "../maintenance/movieTags";
 import type { NetworkClient } from "../network";
-import { committedMovieRows, toCommittedMovie } from "../publication/committedMovie";
+import { toCommittedMovie } from "../publication/committedMovie";
 import { MoveOutput } from "../publication/MoveOutput";
+import { assertSymlinkSupport } from "../publication/outputFileSystem";
 import { movieOutputResultAssets } from "../publication/outputLibrary";
 import { acquireOutputDirectories } from "../publication/outputMutex";
 import { toRootFileRef } from "../publication/outputRefs";
@@ -58,12 +61,12 @@ import type {
 import { toScrapeRunSnapshotDto } from "../tasks/session/scrapeRunSnapshotDto";
 import type { ActorImageService } from "./ActorImageService";
 import type { RuntimeActorSourceProvider } from "./actorOutput";
-import { AggregationService } from "./aggregation";
+import { AggregationService, type CrawlerPort, type SiteResultSink } from "./aggregation";
 import { DirectoryInventory } from "./DirectoryInventory";
 import { createDirectoryScope, discoverDirectoryFiles } from "./directoryDiscovery";
 import { DownloadManager, type ImageHostCooldownStore } from "./download";
 import { applyScrapeNetworkPolicy, createScrapeExecutionPolicy } from "./executionPolicy";
-import { FileOrganizer } from "./FileOrganizer";
+import { assertTargetLayout, FileOrganizer } from "./FileOrganizer";
 import { FileScraper, type PreparedMovieGroup, type RuntimeScrapeSignalService } from "./FileScraper";
 import { admitScrapeGroups, type MovieGroup } from "./movieGroups";
 import { NfoGenerator } from "./nfo";
@@ -86,48 +89,20 @@ export class ScrapeRunnerError extends Error {
   }
 }
 
-export type ScrapeRunnerStartInput =
-  | {
-      mode: "directory";
-      source: DirectorySource;
-      targetDir?: string;
-    }
-  | {
-      mode: "single";
-      ref: RootFileRef;
-      manualUrl?: string;
-    }
-  | {
-      mode: "selection";
-      refs: RootFileRef[];
-      manualUrl?: string;
-      outputRootId?: string;
-      outputRelativeDirectory?: string;
-    }
-  | ScrapeStartInput;
-
-type NormalizedScrapeStart =
+type NormalizedScrapeStart = { library: MediaLibraryRecord } & (
   | {
       mode: "directory";
       scope: DirectoryTaskScope;
       rootId: string;
-      outputRootId: string;
-      outputRelativeDirectory: string;
     }
   | {
-      mode: "single";
-      ref: RootFileRef;
-      manualUrl?: string;
-      outputRootId?: string;
-      outputRelativeDirectory?: string;
-    }
-  | {
-      mode: "batch";
+      mode: "single" | "batch";
       refs: RootFileRef[];
       manualUrl?: string;
-      outputRootId: string;
-      outputRelativeDirectory: string;
-    };
+      number?: string;
+      unpin?: boolean;
+    }
+);
 
 type ScrapeRunnerStartContext = {
   normalized: NormalizedScrapeStart;
@@ -138,6 +113,8 @@ type ScrapeRunContext = {
   // Frozen for one run so a batch never mixes behaviours; retries and reruns start new runs from current settings.
   // Connection settings (proxy, timeout, retries) stay live because NetworkClient reads them per request.
   configuration: Configuration;
+  target: PublicationTarget;
+  unpin?: boolean;
   inventory?: DirectoryInventory;
   groups?: MovieGroup[];
   rootGuard?: ReturnType<ConfiguredMediaRootService["rootIntegrityGuard"]>;
@@ -169,11 +146,20 @@ export interface ScrapeRunnerDependencies {
   persistence: {
     scrapeRuns: ScrapeRunRepository;
     library: LibraryRepository;
+    libraries: Pick<MediaLibraryRepository, "get">;
+    pending: PendingRepository;
     mediaRoots: ConfiguredMediaRootService;
+    /** Polled downloaders; only the server has them. */
+    downloaders?: Pick<DownloaderRepository, "ownsPath">;
   };
+  /** Directories that received published movies, for media servers to scan. */
+  onPublished?: (directories: readonly string[], configuration: Configuration) => void;
+  /** Files that newly entered the pending list. */
+  onPending?: (count: number) => void;
+  recordSiteResults: SiteResultSink;
   getConfiguration: () => Promise<Configuration>;
   networkClient: NetworkClient;
-  crawlerProvider: import("../crawler").CrawlerProvider;
+  crawlerProvider: CrawlerPort;
   imageHostCooldownStore: ImageHostCooldownStore;
   actorImageService: ActorImageService;
   actorSourceProvider?: RuntimeActorSourceProvider;
@@ -253,8 +239,10 @@ export class ScrapeRunner {
       retry: (runId, itemIds) => this.createRetryRun(runId, itemIds),
       rerunDirectory: async (runId) => {
         const configuration = structuredClone(await this.deps.getConfiguration());
+        const target = toPublicationTarget(this.runLibrary(await this.deps.persistence.scrapeRuns.get(runId)));
+        assertTargetLayout(configuration, target);
         const run = await this.deps.persistence.scrapeRuns.rerunDirectory(runId);
-        this.runContexts.set(run.id, { configuration });
+        this.runContexts.set(run.id, { configuration, target });
         return run;
       },
       runId: (run) => run.id,
@@ -282,7 +270,7 @@ export class ScrapeRunner {
     };
   }
 
-  async start(input: ScrapeRunnerStartInput): Promise<StartScrapeResult> {
+  async start(input: ScrapeStartInput): Promise<StartScrapeResult> {
     if (this.closed) throw new Error("Scrape queue is closing");
     const configuration = structuredClone(await this.deps.getConfiguration());
     const normalized = await this.normalizeStartInput(input, configuration);
@@ -375,6 +363,7 @@ export class ScrapeRunner {
         id: manifest.id,
         rootId: manifest.rootId,
         rootDisplayName: root.displayName,
+        libraryId: manifest.libraryId,
         requestedOutputRootId: manifest.requestedOutputRootId,
         outputRootId: manifest.requestedOutputRootId,
         executionMode: manifest.executionMode,
@@ -407,7 +396,6 @@ export class ScrapeRunner {
           outputRelativePath: item.outputRelativePath,
           assets: item.assets,
           manualUrl: item.manualUrl,
-          uncensoredAmbiguous: item.uncensoredAmbiguous,
           persistenceState: "terminal",
           createdAt: manifest.createdAt.toISOString(),
           updatedAt: (manifest.completedAt ?? manifest.createdAt).toISOString(),
@@ -415,25 +403,6 @@ export class ScrapeRunner {
       }
     }
     return { runs, results };
-  }
-
-  async pendingUncensoredConfirmation(): Promise<ScrapePendingUncensoredConfirmationResponse> {
-    const entries = await this.deps.persistence.library.listPendingUncensored();
-    return {
-      items: entries.flatMap((entry) => {
-        const data = entry.crawlerDataJson ? (JSON.parse(entry.crawlerDataJson) as CrawlerData) : null;
-        const nfo = entry.assets.find((asset) => asset.kind === "nfo");
-        return entry.files.map((file) => ({
-          id: file.id,
-          ref: { rootId: file.rootId, relativePath: file.rootRelativePath },
-          fileId: file.id,
-          fileName: file.fileName,
-          number: data?.number ?? entry.number ?? file.fileName,
-          title: data?.title_zh ?? data?.title ?? entry.title,
-          nfoRelativePath: nfo?.relativePath ?? null,
-        }));
-      }),
-    };
   }
 
   async result(id: string): Promise<ScrapeResultDetailResponse> {
@@ -478,7 +447,6 @@ export class ScrapeRunner {
           outputRelativePath: snapshotItem.outputRelativePath,
           assets: snapshotItem.assets,
           manualUrl: snapshotItem.manualUrl,
-          uncensoredAmbiguous: snapshotItem.uncensoredAmbiguous,
           persistenceState: "terminal",
           createdAt: snapshotCreatedAt,
           updatedAt: snapshotUpdatedAt,
@@ -515,7 +483,6 @@ export class ScrapeRunner {
               : { type: "remote", kind: asset.kind, url: asset.uri },
           ),
           manualUrl: null,
-          uncensoredAmbiguous: entry.uncensoredAmbiguous,
           persistenceState: "terminal",
           createdAt: entry.createdAt.toISOString(),
           updatedAt: (entry.lastRefreshedAt ?? entry.createdAt).toISOString(),
@@ -524,122 +491,6 @@ export class ScrapeRunner {
     }
 
     throw new Error(`Scrape result not found: ${id}`);
-  }
-
-  async confirmUncensored(input: ScrapeConfirmUncensoredInput): Promise<UncensoredConfirmResponse> {
-    const configuration = await this.deps.getConfiguration();
-    if (!configuration.download.generateNfo)
-      throw new ScrapeRunnerError("INVALID_ARGUMENT", "NFO generation is disabled; cannot confirm uncensored type");
-    const selected = new Map<
-      string,
-      { entry: Awaited<ReturnType<LibraryRepository["getEntryById"]>>; choice: UncensoredChoice }
-    >();
-    for (const item of input.items) {
-      const entry = await this.deps.persistence.library.getEntryByFileId(item.fileId);
-      const previous = selected.get(entry.id);
-      if (previous && previous.choice !== item.choice)
-        throw new Error("Cannot select different uncensored types for the same movie");
-      selected.set(entry.id, { entry, choice: item.choice });
-    }
-    const roots = await this.deps.persistence.mediaRoots.listRoots();
-    const rootsById = new Map(roots.map((root) => [root.id, root]));
-    await this.deps.persistence.mediaRoots.assertRootIntegrity(
-      new Set(
-        [...selected.values()].flatMap(({ entry }) => [
-          ...entry.files.map((file) => file.rootId),
-          ...entry.assets.flatMap((asset) => asset.rootId ?? []),
-        ]),
-      ),
-    );
-    const maintenance = new MaintenanceRuntime({
-      actorImageService: this.deps.actorImageService,
-      actorSourceProvider: this.deps.actorSourceProvider,
-      config: { get: async () => configuration },
-      fileOrganizer: this.fileOrganizer,
-      nfoGenerator: this.nfoGenerator,
-      signalService: { setProgress: () => undefined, showLogText: () => undefined },
-    });
-    const updatedItems: UncensoredConfirmResponse["items"] = [];
-    for (const { entry, choice } of selected.values()) {
-      const root = rootsById.get(entry.files[0]?.rootId ?? "");
-      if (!root) throw new Error("Movie is missing valid media files");
-      const result = await maintenance.applyLibraryEntry({
-        root,
-        presetId: "local_organize",
-        preserveRegisteredMetadata: true,
-        entry,
-        localState: { uncensoredChoice: choice },
-        publication: {
-          roots,
-          identity: {
-            movieId: entry.id,
-            assets: entry.assets.flatMap((asset) =>
-              asset.rootId && asset.relativePath
-                ? [
-                    {
-                      rootId: asset.rootId,
-                      relativePath: asset.relativePath,
-                      fileId: asset.fileId,
-                      kind: asset.kind,
-                      published: asset.published,
-                    },
-                  ]
-                : [],
-            ),
-          },
-          commit: (movie) => {
-            const rows = committedMovieRows(movie);
-            this.deps.persistence.library.writeEntry({ ...rows.movie, uncensoredAmbiguous: false }, rows.files);
-          },
-        },
-      });
-      if (result.status === "failed" || !result.output)
-        throw new Error(result.error ?? "Failed to apply uncensored confirmation maintenance");
-      const updates = new Map<
-        string,
-        Pick<ScrapeResult, "output" | "nfo" | "assets" | "crawlerData" | "uncensoredAmbiguous">
-      >();
-      for (const file of result.output.files) {
-        const previous = entry.files.find((candidate) => candidate.id === file.fileId);
-        const sourceRoot = previous && rootsById.get(previous.rootId);
-        const targetRoot = rootsById.get(file.target.rootId);
-        if (!previous || !sourceRoot || !targetRoot) throw new Error(`Missing published library file: ${file.fileId}`);
-        const assets = movieOutputResultAssets(result.output, file);
-        const nfo = assets.find((asset) => asset.type === "local" && asset.kind === "nfo");
-        updates.set(file.fileId, {
-          output: file.target,
-          nfo: nfo?.type === "local" ? nfo.file : undefined,
-          assets,
-          crawlerData: result.crawlerData,
-          uncensoredAmbiguous: false,
-        });
-        updatedItems.push({
-          fileId: file.fileId,
-          sourceVideoPath: resolveRootRelativePath(sourceRoot, previous.rootRelativePath),
-          targetVideoPath: resolveRootRelativePath(targetRoot, file.target.relativePath),
-          targetNfoPath: result.output.nfoPath,
-          choice,
-        });
-      }
-      this.coordinatorInstance?.updateLibraryFiles(updates);
-      for (const snapshot of this.terminalSnapshots.values()) {
-        for (const item of snapshot.items) {
-          const update = item.resultId ? updates.get(item.resultId) : undefined;
-          if (!update) continue;
-          item.outputRootId = update.output?.rootId ?? null;
-          item.outputRelativePath = update.output?.relativePath ?? null;
-          item.nfoRootId = update.nfo?.rootId ?? null;
-          item.nfoRelativePath = update.nfo?.relativePath ?? null;
-          item.assets = update.assets;
-          item.crawlerData = update.crawlerData ?? null;
-          item.uncensoredAmbiguous = false;
-        }
-        snapshot.ambiguousUncensoredItems = snapshot.ambiguousUncensoredItems.filter(
-          (item) => !updates.has(item.fileId),
-        );
-      }
-    }
-    return { updatedCount: updatedItems.length, items: updatedItems };
   }
 
   recordLog(
@@ -660,72 +511,69 @@ export class ScrapeRunner {
   }
 
   private async normalizeStartInput(
-    input: ScrapeRunnerStartInput,
+    input: ScrapeStartInput,
     configuration: Configuration,
   ): Promise<NormalizedScrapeStart> {
+    const library = this.deps.persistence.libraries.get(input.libraryId);
+    assertTargetLayout(configuration, toPublicationTarget(library));
     if ("source" in input) {
       const directoryScope = createDirectoryScope(
         input.source,
-        "mode" in input ? (input.targetDir ?? input.source.scanDir) : input.targetDir,
+        library.placement === "inPlace" ? input.source.scanDir : library.outputPath,
         configuration,
       );
       const scan = await this.deps.persistence.mediaRoots.admitDirectory({ hostPath: directoryScope.scanDir });
-      const output =
-        directoryScope.targetDir === directoryScope.scanDir
-          ? { id: scan.root.id, relativeDirectory: scan.relativeDirectory }
-          : await this.deps.persistence.mediaRoots.prepareOutputDirectory({ hostPath: directoryScope.targetDir });
       this.rootDisplayNames.set(scan.root.id, scan.root.displayName);
-      return {
-        mode: "directory",
-        scope: directoryScope,
-        rootId: scan.root.id,
-        outputRootId: output.id,
-        outputRelativeDirectory: output.relativeDirectory,
-      };
+      return { library, mode: "directory", scope: directoryScope, rootId: scan.root.id };
     }
 
-    const refs = "mode" in input && input.mode === "single" ? [input.ref] : input.refs;
-    const ref = refs[0];
-    if (!ref) throw new ScrapeRunnerError("NO_FILES", "No files selected");
-    const single =
-      ("mode" in input && input.mode === "single") || ("executionMode" in input && input.executionMode === "single");
-    const manualUrl = input.manualUrl;
-    const outputRootId = "outputRootId" in input ? input.outputRootId : undefined;
-    const outputRelativeDirectory = "outputRelativeDirectory" in input ? input.outputRelativeDirectory : undefined;
-    if (single) {
-      return { mode: "single", ref, manualUrl, outputRootId, outputRelativeDirectory };
-    }
+    if (!input.refs[0]) throw new ScrapeRunnerError("NO_FILES", "No files selected");
+    if (input.executionMode === "single" && input.refs.length !== 1)
+      throw new ScrapeRunnerError("INVALID_ARGUMENT", "A single scrape takes exactly one file");
     return {
-      mode: "batch",
-      refs,
-      manualUrl,
-      outputRootId: outputRootId ?? ref.rootId,
-      outputRelativeDirectory: outputRelativeDirectory ?? "",
+      library,
+      mode: input.executionMode,
+      refs: input.refs,
+      manualUrl: input.manualUrl,
+      number: input.number,
+      unpin: input.unpin,
     };
+  }
+
+  /** In place, output stays in each file's own root; otherwise it goes to the library's output directory. */
+  private async libraryOutput(
+    library: MediaLibraryRecord,
+    sourceRootId: string,
+  ): Promise<{ outputRootId: string; outputRelativeDirectory: string | null }> {
+    if (library.placement === "inPlace") return { outputRootId: sourceRootId, outputRelativeDirectory: null };
+    const output = await this.deps.persistence.mediaRoots.prepareOutputDirectory({ hostPath: library.outputPath });
+    if (library.placement === "symlink") await assertSymlinkSupport(library.outputPath);
+    return { outputRootId: output.id, outputRelativeDirectory: output.relativeDirectory || null };
   }
 
   private async createRun(input: ScrapeRunnerStartContext): Promise<ScrapeRunManifest> {
     const { normalized, configuration } = input;
+    const { library } = normalized;
+    const target = toPublicationTarget(library);
 
     if (normalized.mode === "directory") {
       const run = await this.deps.persistence.scrapeRuns.create({
+        libraryId: library.id,
         rootId: normalized.rootId,
-        outputRootId: normalized.outputRootId,
-        outputRelativeDirectory: normalized.outputRelativeDirectory || null,
+        ...(await this.libraryOutput(library, normalized.rootId)),
         executionMode: "batch",
         directoryScopeJson: JSON.stringify(normalized.scope),
         items: [],
       });
-      this.runContexts.set(run.id, { configuration });
+      this.runContexts.set(run.id, { configuration, target });
       return run;
     }
 
-    const rawRefs = normalized.mode === "single" ? [normalized.ref] : normalized.refs;
-    const canonicalRefs = await this.deps.persistence.mediaRoots.canonicalizeFileRefs(rawRefs);
+    const canonicalRefs = await this.deps.persistence.mediaRoots.canonicalizeFileRefs(normalized.refs);
     const inventory = new DirectoryInventory();
     const manualScrape = resolveManualScrapeRoute(normalized.manualUrl, configuration.network);
     const groups = await admitScrapeGroups({
-      refs: canonicalRefs.map((ref) => ({ ...ref, manualScrape })),
+      refs: canonicalRefs.map((ref) => ({ ...ref, manualScrape, number: normalized.number })),
       resolveRoot: (id) => this.deps.persistence.mediaRoots.get(id),
       inventory,
       configuration,
@@ -737,13 +585,10 @@ export class ScrapeRunner {
     const root = await this.deps.persistence.mediaRoots.get(rootId);
     this.rootDisplayNames.set(root.id, root.displayName);
 
-    const outputRootId = normalized.mode === "single" ? (normalized.outputRootId ?? rootId) : normalized.outputRootId;
-    const outputRelativeDirectory = normalized.outputRelativeDirectory || null;
-
     const manifest = await this.deps.persistence.scrapeRuns.create({
+      libraryId: library.id,
       rootId,
-      outputRootId,
-      outputRelativeDirectory,
+      ...(await this.libraryOutput(library, rootId)),
       executionMode: normalized.mode,
       items: members.map((member, ordinal) => ({
         id: member.fileId,
@@ -751,11 +596,18 @@ export class ScrapeRunner {
         rootId: member.source.rootId,
         relativePath: member.source.relativePath,
         manualUrl: normalized.manualUrl ?? null,
+        number: normalized.number ?? null,
       })),
     });
 
-    this.runContexts.set(manifest.id, { configuration, inventory, groups });
+    this.runContexts.set(manifest.id, { configuration, target, unpin: normalized.unpin, inventory, groups });
     return manifest;
+  }
+
+  /** Retries and reruns publish with the library's current settings, like a new run. */
+  private runLibrary(run: ScrapeRunRecord): MediaLibraryRecord {
+    if (!run.libraryId) throw new Error("This scrape run has no library; start a new scrape instead");
+    return this.deps.persistence.libraries.get(run.libraryId);
   }
 
   private async createRetryRun(runId: string, itemIds?: readonly string[]): Promise<ScrapeRunManifest> {
@@ -816,12 +668,16 @@ export class ScrapeRunner {
     );
     const itemsToRetry = [...batchItems.values()].filter((item) => retryIds.has(item.id));
     if (itemsToRetry.length === 0) throw new Error(`Scrape run has no failed or skipped items to retry: ${run.id}`);
+    const library = this.runLibrary(run);
+    const target = toPublicationTarget(library);
+    assertTargetLayout(configuration, target);
     const groups = await admitScrapeGroups({
       refs: itemsToRetry.map((item) => ({
         rootId: item.rootId,
         relativePath: item.relativePath,
         manualScrape: resolveManualScrapeRoute(item.manualUrl, configuration.network),
         uncensoredChoice: item.uncensoredChoice ?? undefined,
+        number: item.number ?? undefined,
       })),
       resolveRoot: (id) => this.deps.persistence.mediaRoots.get(id),
       inventory,
@@ -831,9 +687,9 @@ export class ScrapeRunner {
 
     const manifest = await this.deps.persistence.scrapeRuns.create({
       previousRunId: run.id,
+      libraryId: library.id,
       rootId: run.rootId,
-      outputRootId: run.requestedOutputRootId,
-      outputRelativeDirectory: run.requestedOutputRelativeDirectory,
+      ...(await this.libraryOutput(library, run.rootId)),
       executionMode: run.executionMode,
       items: members.map((member, ordinal) => {
         const original = itemsToRetry.find(
@@ -846,10 +702,11 @@ export class ScrapeRunner {
           relativePath: member.source.relativePath,
           manualUrl: member.manualScrape?.detailUrl ?? original?.manualUrl ?? null,
           uncensoredChoice: original?.uncensoredChoice ?? null,
+          number: original?.number ?? null,
         };
       }),
     });
-    this.runContexts.set(manifest.id, { configuration, inventory, groups });
+    this.runContexts.set(manifest.id, { configuration, target, inventory, groups });
     return manifest;
   }
 
@@ -912,7 +769,7 @@ export class ScrapeRunner {
     this.runContexts.delete(manifest.id);
     await checkRoots([...new Set([...manifest.items.map((item) => item.rootId), ...outputRootIds])]);
 
-    const { configuration } = context;
+    const { configuration, target, unpin } = context;
     applyScrapeNetworkPolicy(this.deps.networkClient, configuration);
     const policy = createScrapeExecutionPolicy(configuration, { logger: this.logger });
 
@@ -926,13 +783,6 @@ export class ScrapeRunner {
     const outputRoot = await this.deps.persistence.mediaRoots.get(manifest.requestedOutputRootId);
     roots.set(outputRoot.id, outputRoot);
 
-    const metadataPath = configuration.behavior.metadataOnly ? configuration.paths.metadataPath.trim() : "";
-    if (metadataPath) {
-      const metadataRoot = await this.deps.persistence.mediaRoots.ensurePathRecord({ hostPath: metadataPath });
-      await checkRoots([metadataRoot.id]);
-      roots.set(metadataRoot.id, metadataRoot);
-    }
-
     const fileScraper = new FileScraper(
       {
         aggregationService:
@@ -941,6 +791,7 @@ export class ScrapeRunner {
             config: configuration,
             logger: this.logger,
             signal,
+            recordSiteResults: this.deps.recordSiteResults,
           }),
         translateService: this.translateService,
         nfoGenerator: this.nfoGenerator,
@@ -1023,7 +874,14 @@ export class ScrapeRunner {
       configuration,
       roots: [...roots.values()],
       scrapeSessionId: manifest.id,
-      outputTemplateRoot: resolveRootRelativePath(outputRoot, manifest.requestedOutputRelativeDirectory ?? ""),
+      unpin,
+      target:
+        target.placement === "inPlace"
+          ? target
+          : {
+              ...target,
+              outputPath: resolveRootRelativePath(outputRoot, manifest.requestedOutputRelativeDirectory ?? ""),
+            },
     };
 
     const movieGroups: MovieGroup<RunnerScrapeItem>[] = groups.map((group) => ({
@@ -1060,6 +918,12 @@ export class ScrapeRunner {
               },
               options: {
                 ...scrapeOptions,
+                // Moving a file out of a downloader's save path stops its torrent seeding, so it is linked instead.
+                target:
+                  scrapeOptions.target.placement === "move" &&
+                  this.deps.persistence.downloaders?.ownsPath(member.sourcePath)
+                    ? { ...scrapeOptions.target, placement: "hardlink" as const }
+                    : scrapeOptions.target,
                 source: { rootId: member.rootId, relativePath: member.relativePath },
                 manualScrape: member.manualScrape,
                 localState: uncensoredChoice ? { uncensoredChoice } : undefined,
@@ -1103,12 +967,28 @@ export class ScrapeRunner {
       },
       commitItems: async (entries, output) => {
         if (!output) {
-          return entries.map((entry) => {
+          let added = 0;
+          const committed = entries.map((entry) => {
             if (!entry.result) throw new Error(`Scrape item has no terminal result: ${entry.item.id}`);
             const result = { ...entry.result, resultId: entry.item.id };
+            if (result.status === "failed") {
+              const pending = result.pending ?? { kind: "failed", number: entry.item.fileInfo.number || undefined };
+              const isNew = this.deps.persistence.pending.upsert({
+                kind: pending.kind,
+                rootId: entry.item.rootId,
+                relativePath: entry.item.relativePath,
+                libraryId: manifest.libraryId,
+                number: pending.number ?? null,
+                detail: result.error ?? null,
+                candidatesJson: pending.candidates?.length ? JSON.stringify(pending.candidates) : null,
+              });
+              if (isNew) added += 1;
+            }
             this.deps.onCommitted?.(manifest.id, result);
             return { itemId: entry.item.id, result };
           });
+          if (added) this.deps.onPending?.(added);
+          return committed;
         }
 
         if (!output.scrape) throw new Error("Scrape output requires movie metadata");
@@ -1125,6 +1005,7 @@ export class ScrapeRunner {
             fileId: file.fileId,
             entryIdentity: file.entryIdentity,
             sourceEntryIdentity: file.sourceEntryIdentity,
+            retainedSourceIdentity: file.retainedSourceIdentity,
             rootId: file.rootId,
             rootRelativePath: file.rootRelativePath,
             size: file.size,
@@ -1138,9 +1019,11 @@ export class ScrapeRunner {
         });
 
         const uncensoredAmbiguous = output.files.some((f) => f.scrape?.uncensoredAmbiguous);
+        let uncensoredPendingAdded = false;
 
         const commit = () => {
-          this.deps.persistence.library.writeEntry(
+          const published = libraryEntries[0];
+          const result = this.deps.persistence.pending.commitPublication(
             {
               id: committedMovie.id,
               assets: committedMovie.assets.filter((asset) => asset.fileId === null),
@@ -1149,11 +1032,22 @@ export class ScrapeRunner {
               title: committedMovie.title,
               actors: [...committedMovie.actors],
               crawlerDataJson: committedMovie.crawlerDataJson,
-              uncensoredAmbiguous,
               createdAt: completedAt,
             },
             libraryEntries,
+            {
+              clearFiles: entries.map((entry) => entry.item),
+              uncensored: uncensoredAmbiguous
+                ? {
+                    rootId: published.rootId,
+                    relativePath: published.rootRelativePath,
+                    libraryId: manifest.libraryId,
+                    number: committedMovie.number,
+                  }
+                : undefined,
+            },
           );
+          uncensoredPendingAdded = result.uncensoredAdded;
         };
 
         const release = await acquireOutputDirectories(
@@ -1177,6 +1071,15 @@ export class ScrapeRunner {
         } finally {
           release();
         }
+        if (uncensoredPendingAdded) this.deps.onPending?.(1);
+        const publishedDirectory = (ref: RootFileRef) =>
+          dirname(resolveRootRelativePath(requireRoot(ref.rootId), ref.relativePath));
+        this.deps.onPublished?.(
+          output.scrape.nfo
+            ? [publishedDirectory(output.scrape.nfo)]
+            : [...new Set(output.files.map((file) => publishedDirectory(file.target)))],
+          configuration,
+        );
 
         return entries.map((entry) => {
           const video = output.files.find((f) => f.scrape?.itemId === entry.item.id);
@@ -1196,7 +1099,7 @@ export class ScrapeRunner {
             sources: output.scrape?.sources,
             videoMeta: facts.videoMeta,
             nfo: output.scrape?.nfo,
-            uncensoredAmbiguous: facts.uncensoredAmbiguous,
+            ...(facts.uncensoredAmbiguous ? { pending: { kind: "uncensored", number: committedMovie.number } } : {}),
             output: video.target,
             assets: movieOutputResultAssets(output, video),
           };
@@ -1248,6 +1151,7 @@ export class ScrapeRunner {
         error: manifest.error,
         continuity: !manifest.disposition || manifest.disposition === "interrupted" ? "interrupted" : "final",
         previousTaskId: manifest.previousRunId,
+        libraryId: manifest.libraryId,
       },
       directorySource: manifest.directoryScopeJson
         ? directoryTaskScopeSchema.parse(JSON.parse(manifest.directoryScopeJson))
@@ -1265,7 +1169,6 @@ export class ScrapeRunner {
       items: [],
       latestStage: null,
       logs: [],
-      ambiguousUncensoredItems: [],
     };
   }
 

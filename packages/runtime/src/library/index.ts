@@ -6,8 +6,11 @@ export * from "./availability";
 export * from "./desktopInputRoot";
 export * from "./desktopOutputRoot";
 export * from "./entryDto";
+export * from "./libraryScope";
+export * from "./mediaLibraryService";
 export * from "./mediaPathOwnership";
 export * from "./mediaRootService";
+export * from "./pendingService";
 export * from "./registeredMedia";
 export * from "./relink";
 
@@ -33,14 +36,6 @@ export interface RuntimeOutputLibrarySummary {
   fileCount: number;
   totalBytes: number;
   scannedAt: number;
-  rootPath: string | null;
-}
-
-export interface RuntimeScrapeOutputSummaryInput {
-  fileCount: number;
-  totalBytes: number;
-  completedAt: Date | number | string;
-  outputDirectory: string | null;
 }
 
 export interface RuntimeLibraryEntrySummaryInput {
@@ -67,11 +62,6 @@ export const toRuntimeLibraryEntrySummaryInput = (
   if (!file) throw new Error(`Library display file not found: ${entry.id}`);
   return { ...entry, fileName: file.fileName, lastKnownPath: file.lastKnownPath };
 };
-
-export interface RuntimeLibraryOverview {
-  output: RuntimeOutputLibrarySummary;
-  recentAcquisitions: RuntimeRecentAcquisition[];
-}
 
 const isRemoteAssetUri = (value: string): boolean => /^https?:\/\//iu.test(value.trim());
 
@@ -129,9 +119,12 @@ export const toLibraryAssets = (
   return mapped;
 };
 
+/** Matches the single row the overview grid shows at its widest breakpoint. */
+export const RECENT_ACQUISITION_LIMIT = 6;
+
 export const sortAndLimitRecentAcquisitions = <T extends RuntimeRecentAcquisition>(
   items: readonly T[],
-  limit = 50,
+  limit: number,
 ): T[] =>
   [...items]
     .sort((left, right) => {
@@ -140,14 +133,10 @@ export const sortAndLimitRecentAcquisitions = <T extends RuntimeRecentAcquisitio
     })
     .slice(0, Math.max(0, Math.trunc(limit)));
 
-export const createEmptyOutputLibrarySummary = (
-  scannedAt: number,
-  rootPath: string | null = null,
-): RuntimeOutputLibrarySummary => ({
+export const createEmptyOutputLibrarySummary = (scannedAt: number): RuntimeOutputLibrarySummary => ({
   fileCount: 0,
   totalBytes: 0,
   scannedAt,
-  rootPath,
 });
 
 export const toTimestampMs = (value: Date | number | string): number => {
@@ -161,28 +150,13 @@ export const toTimestampMs = (value: Date | number | string): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-export const createOutputLibrarySummaryFromScrapeOutput = (
-  output: RuntimeScrapeOutputSummaryInput | null | undefined,
-  fallbackScannedAt: number,
-): RuntimeOutputLibrarySummary =>
-  output
-    ? {
-        fileCount: output.fileCount,
-        totalBytes: output.totalBytes,
-        scannedAt: toTimestampMs(output.completedAt),
-        rootPath: output.outputDirectory,
-      }
-    : createEmptyOutputLibrarySummary(fallbackScannedAt);
-
 export const createOutputLibrarySummaryFromEntries = (
   entries: readonly RuntimeLibraryEntrySummaryInput[],
   scannedAt: number,
-  rootPath: string | null = null,
 ): RuntimeOutputLibrarySummary => ({
   fileCount: entries.length,
   totalBytes: entries.reduce((sum, entry) => sum + Math.max(0, Math.trunc(entry.size ?? 0)), 0),
   scannedAt,
-  rootPath,
 });
 
 export const toRuntimeRecentAcquisition = (entry: RuntimeLibraryEntrySummaryInput): RuntimeRecentAcquisition | null => {
@@ -210,14 +184,13 @@ export const isVisibleRecentLibraryEntry = (
 
 export const createRecentAcquisitionsFromEntries = (
   entries: readonly RuntimeLibraryEntrySummaryInput[],
-  limit = 50,
 ): RuntimeRecentAcquisition[] =>
   sortAndLimitRecentAcquisitions(
     entries
       .filter(isVisibleRecentLibraryEntry)
       .map((entry) => toRuntimeRecentAcquisition(entry))
       .filter((entry): entry is RuntimeRecentAcquisition => entry !== null),
-    limit,
+    RECENT_ACQUISITION_LIMIT,
   );
 
 export const getLatestLibraryEntryTimestamp = (
@@ -225,23 +198,4 @@ export const getLatestLibraryEntryTimestamp = (
 ): number | null => {
   const latest = entries.reduce((max, entry) => Math.max(max, toTimestampMs(entry.createdAt)), 0);
   return latest > 0 ? latest : null;
-};
-
-export const createRuntimeLibraryOverview = (input: {
-  entries: readonly RuntimeLibraryEntrySummaryInput[];
-  latestOutput?: RuntimeScrapeOutputSummaryInput | null;
-  now?: number;
-  recentLimit?: number;
-  rootPath?: string | null;
-}): RuntimeLibraryOverview => {
-  const now = input.now ?? Date.now();
-  const recentAcquisitions = createRecentAcquisitionsFromEntries(input.entries, input.recentLimit);
-  const output = input.latestOutput
-    ? createOutputLibrarySummaryFromScrapeOutput(input.latestOutput, now)
-    : createOutputLibrarySummaryFromEntries(input.entries, now, input.rootPath ?? null);
-
-  return {
-    output,
-    recentAcquisitions,
-  };
 };

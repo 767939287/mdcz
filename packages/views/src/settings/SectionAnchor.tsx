@@ -49,33 +49,27 @@ export function SectionAnchor({
   }
 
   return (
-    <section
-      ref={sectionRef}
-      data-toc-id={id}
-      id={`settings-${id}`}
-      className={cn("scroll-mt-28 [content-visibility:auto] [contain-intrinsic-size:auto_800px]", className)}
-    >
+    <section ref={sectionRef} data-toc-id={id} id={`settings-${id}`} className={cn("scroll-mt-28", className)}>
       <Collapsible open={resolvedOpen} onOpenChange={setOpen}>
         {(title || description) && (
-          <header className="mb-4">
-            <CollapsibleTrigger className="group flex w-full items-start gap-4 rounded-[var(--radius-quiet-lg)] py-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/20">
-              <span className="min-w-0 flex-1">
-                {title && (
-                  <span className="block font-numeric text-[1.5rem] font-bold tracking-[-0.03em] text-foreground md:text-[1.75rem]">
-                    {title}
-                  </span>
-                )}
-                {description && (
-                  <span className="mt-1.5 block max-w-prose text-sm leading-6 text-muted-foreground">
-                    {description}
-                  </span>
-                )}
-              </span>
-              <span className="mt-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border/50 bg-surface-low text-muted-foreground transition-colors group-hover:bg-surface-raised group-hover:text-foreground">
-                <ChevronDown
-                  className={cn("size-4 transition-transform duration-200", resolvedOpen ? "rotate-0" : "-rotate-90")}
-                />
-              </span>
+          <header className="mb-4 flex items-start gap-4 py-1">
+            <div className="min-w-0 flex-1">
+              {title && (
+                <h2 className="font-numeric text-[1.5rem] font-bold tracking-[-0.03em] text-foreground md:text-[1.75rem]">
+                  {title}
+                </h2>
+              )}
+              {description && (
+                <p className="mt-1.5 max-w-prose text-sm leading-6 text-muted-foreground">{description}</p>
+              )}
+            </div>
+            <CollapsibleTrigger
+              aria-label={title ?? label}
+              className="mt-1 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border/50 bg-surface-low text-muted-foreground outline-none transition-colors hover:bg-surface-raised hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20"
+            >
+              <ChevronDown
+                className={cn("size-4 transition-transform duration-200", resolvedOpen ? "rotate-0" : "-rotate-90")}
+              />
             </CollapsibleTrigger>
           </header>
         )}

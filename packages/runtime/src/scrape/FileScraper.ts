@@ -5,12 +5,14 @@ import { filesystemPathKey, type MediaRoot } from "@mdcz/media-store";
 import type { Configuration } from "@mdcz/shared/config";
 import { toErrorMessage } from "@mdcz/shared/error";
 import { buildFileId } from "@mdcz/shared/mediaIdentity";
+import type { PublicationTarget } from "@mdcz/shared/mediaLibrary";
 import type { RootFileRef } from "@mdcz/shared/mediaRef";
 import type {
   CrawlerData,
   DownloadedAssets,
   FileInfo,
   NfoLocalState,
+  ScrapePendingOutcome,
   ScrapeResult,
   VideoMeta,
 } from "@mdcz/shared/types";
@@ -36,7 +38,8 @@ import {
   writePreparedNfo,
 } from "./output/executeOutputSteps";
 import { prepareOnlineMetadata } from "./prepareOnlineMetadata";
-import { preferredLocalNfoBaseNames, selectLocalNfoNames } from "./selectLocalNfo";
+import { pendingOutcomeOf, ScrapeFailureError } from "./scrapeFailure";
+import { newestNfosFirst, preferredLocalNfoBaseNames, selectLocalNfoNames } from "./selectLocalNfo";
 import type { TranslateService } from "./TranslateService";
 import { isAbortError, throwIfAborted } from "./utils/abort";
 import { classifyMovie, isLikelyUncensoredNumber } from "./utils/movieClassification";
@@ -110,8 +113,9 @@ export type FileScrapeOptions = {
   roots?: readonly Pick<MediaRoot, "id" | "hostPath">[];
   itemId?: string;
   operationId?: string;
-  outputDirectory?: string;
-  outputTemplateRoot?: string;
+  target: PublicationTarget;
+  /** Search by number even when the NFO pins a detail page, and drop the pin. */
+  unpin?: boolean;
 };
 export interface ScrapeGroupResult {
   results: ScrapeResult[];
@@ -215,7 +219,9 @@ export class FileScraper {
     const inventory = this.options.inventory ?? new DirectoryInventory();
     const members = entries.map(
       ({ filePath, fileInfo: providedFileInfo, groupMovieId, groupFileId, groupAssets, options, progress }, index) => {
-        const fileInfo = providedFileInfo ?? parseFileInfo(filePath, configuration.scrape.filenameIgnoreTokens);
+        const fileInfo =
+          providedFileInfo ??
+          parseFileInfo(filePath, configuration.scrape.filenameIgnoreTokens, configuration.scrape.numberMappings);
         const fileId = groupFileId ?? buildFileId(fileInfo.filePath);
         return {
           options,
@@ -231,6 +237,7 @@ export class FileScraper {
     try {
       throwIfAborted(signal);
       const inspected = [];
+      let publishedData: CrawlerData | undefined;
       for (const member of members) {
         const { options, progress, fileInfo: parsedFileInfo } = member;
         if (!options.roots?.length) throw new Error("Scrape publication requires registered media roots");
@@ -250,35 +257,32 @@ export class FileScraper {
         member.fileInfo = resolved.fileInfo;
         member.identity = toScrapeIdentity(member.identity.fileId, resolved.fileInfo, options);
         let localState = options.localState;
-        if (configuration.download.generateNfo && configuration.download.keepNfo) {
-          const directory = path.dirname(parsedFileInfo.filePath);
-          const videos = await inventory.mediaEntries(directory);
-          const singleMovie = videos.every(
-            (entry) =>
-              parseFileInfo(entry.name, configuration.scrape.filenameIgnoreTokens).number === parsedFileInfo.number,
-          );
-          const candidates = preferredLocalNfoBaseNames(
-            parsedFileInfo.fileName,
-            parsedFileInfo.part?.suffix,
-            singleMovie,
-          );
-          const nfos = await inventory.files(directory, (name) => path.extname(name).toLowerCase() === ".nfo");
-          const [selectedName] = selectLocalNfoNames(
-            nfos.map((entry) => entry.name),
-            candidates,
-            singleMovie,
-          );
-          const registered =
-            inventory.registeredNfos.get(filesystemPathKey(await inventory.entryPath(parsedFileInfo.filePath))) ?? [];
-          const nfoPath =
-            registered.find((value) =>
-              candidates.some((name) => name.toLowerCase() === path.parse(value).name.toLowerCase()),
-            ) ??
-            registered[0] ??
-            (selectedName ? path.join(directory, selectedName) : undefined);
-          const snapshot = nfoPath ? await inventory.loadNfo(nfoPath) : undefined;
-          localState = snapshot?.localState || localState ? { ...snapshot?.localState, ...localState } : undefined;
-        }
+        const directory = path.dirname(parsedFileInfo.filePath);
+        const videos = await inventory.mediaEntries(directory);
+        const singleMovie = videos.every(
+          (entry) =>
+            parseFileInfo(entry.name, configuration.scrape.filenameIgnoreTokens, configuration.scrape.numberMappings)
+              .number === parsedFileInfo.number,
+        );
+        const candidates = preferredLocalNfoBaseNames(
+          parsedFileInfo.fileName,
+          parsedFileInfo.part?.suffix,
+          singleMovie,
+        );
+        const nfos = await inventory.files(directory, (name) => path.extname(name).toLowerCase() === ".nfo");
+        const [selectedName] = selectLocalNfoNames(
+          nfos.map((entry) => entry.name),
+          candidates,
+          singleMovie,
+        );
+        const registered =
+          inventory.registeredNfos.get(filesystemPathKey(await inventory.entryPath(parsedFileInfo.filePath))) ?? [];
+        const nfoPath =
+          (await newestNfosFirst(registered, (nfoPath) => inventory.stats(nfoPath)))[0] ??
+          (selectedName ? path.join(directory, selectedName) : undefined);
+        const snapshot = nfoPath ? await inventory.loadNfo(nfoPath) : undefined;
+        publishedData ??= snapshot?.crawlerData;
+        localState = snapshot?.localState || localState ? { ...snapshot?.localState, ...localState } : undefined;
         inspected.push({
           ...member,
           size: facts.size,
@@ -289,6 +293,18 @@ export class FileScraper {
         });
       }
       const { fileInfo, options, signalService } = inspected[0];
+      // A pinned detail page is the user's earlier choice; searching by number again could pick the other work.
+      const pin = options.unpin ? undefined : inspected[0].localState?.sourcePin;
+      const manualScrape = options.manualScrape ?? (pin ? { site: pin.site, detailUrl: pin.url } : undefined);
+      if (!fileInfo.number.trim() && !manualScrape?.detailUrl)
+        throw new ScrapeFailureError("no_number", `No number recognized in ${fileInfo.fileName}`);
+      for (const member of inspected) {
+        const { sourcePin: _previous, ...rest } = member.localState ?? {};
+        const sourcePin = manualScrape?.detailUrl
+          ? { site: manualScrape.site, url: manualScrape.detailUrl }
+          : undefined;
+        member.localState = sourcePin ? { ...rest, sourcePin } : member.localState && rest;
+      }
       const scrapeSessionId = options.scrapeSessionId ?? this.options.scrapeSessionId;
       signalService.showLogText(
         `Preparing movie scrape task ${randomUUID()} for ${fileInfo.number} (scrapeSessionId: ${scrapeSessionId ?? "standalone"})`,
@@ -299,24 +315,30 @@ export class FileScraper {
         configuration,
         aggregationService: this.deps.aggregationService,
         translateService: this.deps.translateService,
-        manualScrape: options.manualScrape,
+        published: { crawlerData: publishedData, localState: inspected[0].localState },
+        keepEdits: true,
+        manualScrape,
         signal,
       });
       const planMember = (
         member: { fileInfo: FileInfo; localState?: NfoLocalState; options: FileScrapeOptions },
         versionLabel?: string,
       ) =>
-        this.deps.fileOrganizer.plan(member.fileInfo, crawlerData, configuration, member.localState, {
-          executionMode: this.options.mode ?? "batch",
-          outputDirectory: member.options.outputDirectory,
-          outputTemplateRoot: member.options.outputTemplateRoot,
-          versionLabel,
-        });
+        this.deps.fileOrganizer.plan(
+          member.fileInfo,
+          crawlerData,
+          configuration,
+          member.options.target,
+          member.localState,
+          {
+            versionLabel,
+          },
+        );
       const plans = inspected.map((member) => planMember(member));
       let movieId = inspected[0].groupMovieId ?? randomUUID();
       let assets = inspected[0].groupAssets ?? [];
       const occupiedKeys = new Set<string>();
-      const renaming = configuration.behavior.successFileRename && plans[0].mode === "move";
+      const renaming = plans[0].mode === "move";
       const sourcePaths = inspected.map((member) => member.fileInfo.filePath);
       for (const plan of renaming ? plans : []) {
         const existing = await this.deps.findExistingMovie?.(plan.targetVideoPath, crawlerData.number, sourcePaths);
@@ -392,7 +414,12 @@ export class FileScraper {
     } catch (error) {
       return isAbortError(error)
         ? this.skipped(members[0].identity, "Operation aborted")
-        : this.failed(members[0].identity, members[0].fileInfo, toErrorMessage(error));
+        : this.failed(
+            members[0].identity,
+            members[0].fileInfo,
+            toErrorMessage(error),
+            pendingOutcomeOf(error, members[0].fileInfo.number),
+          );
     }
   }
 
@@ -479,9 +506,9 @@ export class FileScraper {
       crawlerData = downloaded.crawlerData;
       throwIfAborted(signal);
       this.setProgress(progress, 80);
-      const preservedNfoPath = configuration.download.keepNfo
-        ? await findExistingNfoInInventory(prepared.inventory, plan.nfoPath, configuration.download.nfoNaming)
-        : undefined;
+      const preservedNfoPath = configuration.download.generateNfo
+        ? undefined
+        : await findExistingNfoInInventory(prepared.inventory, plan.nfoPath, configuration.download.nfoNaming);
       const publication = await prepareMovieArtifacts({
         inventory: prepared.inventory,
         roots,
@@ -499,6 +526,7 @@ export class FileScraper {
               error: prepared.translationError,
               uncensoredAmbiguous:
                 classification.uncensored &&
+                !member.localState?.uncensoredChoice &&
                 !classification.umr &&
                 !classification.leak &&
                 !isLikelyUncensoredNumber(crawlerData.number || member.fileInfo.number),
@@ -516,7 +544,7 @@ export class FileScraper {
             assets,
             config: configuration,
             crawlerData,
-            enabled: configuration.download.generateNfo && !preservedNfoPath,
+            enabled: configuration.download.generateNfo,
             fileInfo,
             localState: first.localState,
             nfoGenerator: this.deps.nfoGenerator,
@@ -557,7 +585,10 @@ export class FileScraper {
           this.setProgress(member.progress, 100);
           return isAbortError(error)
             ? this.skipped(member.identity, "Operation aborted")
-            : this.failed(member.identity, member.fileInfo, toErrorMessage(error));
+            : this.failed(member.identity, member.fileInfo, toErrorMessage(error), {
+                kind: "failed",
+                number: member.fileInfo.number || undefined,
+              });
         }),
       };
     }
@@ -567,9 +598,10 @@ export class FileScraper {
     identity: ScrapeIdentity,
     fileInfo: FileInfo,
     error: string,
+    pending: ScrapePendingOutcome,
   ): FileScrapeFailure & { status: "failed" } {
     this.deps.logger.error(`Scrape failed for ${fileInfo.filePath}: ${error}`);
-    const result = { ...identity, status: "failed" as const, error };
+    const result = { ...identity, status: "failed" as const, error, pending };
     this.deps.signalService.showFailedInfo({ fileInfo, error });
     return result;
   }

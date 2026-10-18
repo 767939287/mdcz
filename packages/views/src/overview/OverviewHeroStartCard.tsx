@@ -8,7 +8,6 @@ export interface OverviewHeroStartCardProps {
   data?: {
     fileCount: number;
     totalBytes: number;
-    rootPath: string | null;
   } | null;
   hasConfiguredOutput?: boolean;
   isError?: boolean;
@@ -34,13 +33,12 @@ export function OverviewHeroStartCard({
   const t = useT();
   const startAction = labels?.startAction ?? t.overview.hero.startAction;
   const setupAction = labels?.setupAction ?? t.overview.hero.setupAction;
-  const hasOutputRoot = Boolean(data?.rootPath);
-  const canStart = isLoading || isError || hasOutputRoot || hasConfiguredOutput;
+  const canStart = isLoading || isError || hasConfiguredOutput;
 
   return (
     <section
       className={cn(
-        "relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-quiet-xl bg-[linear-gradient(135deg,#050505_0%,#111111_56%,#2f3131_100%)] p-7 text-white shadow-none md:p-8",
+        "relative flex min-h-[210px] flex-col justify-between overflow-hidden rounded-quiet-xl bg-[linear-gradient(135deg,#050505_0%,#111111_56%,#2f3131_100%)] p-6 text-white shadow-none md:p-7",
         className,
       )}
     >
@@ -48,43 +46,38 @@ export function OverviewHeroStartCard({
 
       <div className="relative z-10 flex items-start justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">{t.overview.hero.title}</h2>
-          <p className="mt-3 max-w-lg text-lg leading-8 text-white/66">{t.overview.hero.description}</p>
+          <h2 className="text-2xl font-bold tracking-tight md:text-3xl">{t.overview.hero.title}</h2>
+          <p className="mt-2 max-w-lg text-base leading-7 text-white/66">{t.overview.hero.description}</p>
         </div>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-quiet-lg bg-white/10 text-white/55">
-          <Telescope className="h-6 w-6" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-quiet-lg bg-white/10 text-white/55">
+          <Telescope className="h-5 w-5" />
         </div>
       </div>
 
-      <div className="relative z-10 mt-10 flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
+      <div className="relative z-10 mt-6 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex gap-7">
           {isLoading ? (
             <>
-              <MetricBlock label="Files" value="..." />
-              <MetricBlock label="Size" value="..." />
+              <MetricBlock label={t.overview.hero.files} value="..." />
+              <MetricBlock label={t.overview.hero.size} value="..." />
             </>
           ) : isError ? (
             <>
-              <MetricBlock label="Files" value="-" />
-              <MetricBlock label="Size" value={t.overview.hero.loadFailed} />
-            </>
-          ) : hasOutputRoot ? (
-            <>
-              <MetricBlock label="Files" value={data?.fileCount ?? 0} />
-              <MetricBlock
-                label="Size"
-                value={formatBytes(data?.totalBytes ?? 0, { fractionDigits: 2, trimTrailingZeros: true })}
-              />
+              <MetricBlock label={t.overview.hero.files} value="-" />
+              <MetricBlock label={t.overview.hero.size} value={t.overview.hero.loadFailed} />
             </>
           ) : hasConfiguredOutput ? (
             <>
-              <MetricBlock label="Files" value={0} />
-              <MetricBlock label="Size" value={t.overview.hero.waitingFirstScrape} />
+              <MetricBlock label={t.overview.hero.files} value={data?.fileCount ?? 0} />
+              <MetricBlock
+                label={t.overview.hero.size}
+                value={formatBytes(data?.totalBytes ?? 0, { fractionDigits: 2, trimTrailingZeros: true })}
+              />
             </>
           ) : (
             <>
-              <MetricBlock label="Files" value="-" />
-              <MetricBlock label="Size" value={t.overview.hero.notConfigured} />
+              <MetricBlock label={t.overview.hero.files} value="-" />
+              <MetricBlock label={t.overview.hero.size} value={t.overview.hero.notConfigured} />
             </>
           )}
         </div>

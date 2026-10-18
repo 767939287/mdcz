@@ -174,7 +174,6 @@ export const api: ServerApiContract = {
     export: () => trpcQuery("config.export"),
     import: (input) => trpcMutation("config.import", input),
     read: () => trpcQuery<Configuration>("config.read"),
-    previewNaming: (input) => trpcMutation("config.previewNaming", input),
     reset: (input) => trpcMutation("config.reset", input ?? {}),
     update: (input) => trpcMutation("config.update", input),
     profiles: {
@@ -206,10 +205,14 @@ export const api: ServerApiContract = {
     start: (input) => trpcMutation("maintenance.start", input),
     stop: (input) => trpcMutation("maintenance.stop", input),
   },
+  activity: {
+    list: (input) => trpcQuery("activity.list", input),
+  },
   library: {
     removeFile: (input) => trpcMutation("library.removeFile", input),
     availability: (input) => trpcQuery("library.availability", input),
     list: (input) => trpcQuery("library.list", input),
+    summary: (input) => trpcQuery("library.summary", input),
     detail: (input) => trpcQuery("library.detail", input),
     refresh: (input) => trpcMutation("library.refresh", input),
     rescan: (input) => trpcMutation("library.rescan", input),
@@ -220,9 +223,34 @@ export const api: ServerApiContract = {
     summary: () => trpcQuery("overview.summary"),
     removeRecentAcquisition: (input) => trpcMutation("overview.removeRecentAcquisition", input),
   },
+  libraries: {
+    list: () => trpcQuery("libraries.list"),
+    create: (input) => trpcMutation("libraries.create", input),
+    update: (input) => trpcMutation("libraries.update", input),
+    delete: (input) => trpcMutation("libraries.delete", input),
+    previewNaming: (input) => trpcMutation("libraries.previewNaming", input),
+    probeStubs: (input) => trpcQuery("libraries.probeStubs", input),
+  },
+  pending: {
+    list: () => trpcQuery("pending.list"),
+    detail: (input) => trpcQuery("pending.detail", input),
+    retry: (input) => trpcMutation("pending.retry", input),
+    confirmUncensored: (input) => trpcMutation("pending.confirmUncensored", input),
+    ignore: (input) => trpcMutation("pending.ignore", input),
+  },
+  apiKeys: {
+    list: () => trpcQuery("apiKeys.list"),
+    create: (input) => trpcMutation("apiKeys.create", input),
+    delete: (input) => trpcMutation("apiKeys.delete", input),
+  },
+  notifications: {
+    test: (input) => trpcMutation("notifications.test", input),
+  },
+  integrations: {
+    status: () => trpcQuery("integrations.status"),
+  },
   mediaRoots: {
     ensurePath: (input) => trpcMutation("mediaRoots.ensurePath", input),
-    prepareOutputDirectory: (input) => trpcMutation("mediaRoots.prepareOutputDirectory", input),
     list: () => trpcQuery("mediaRoots.list"),
   },
   persistence: {
@@ -244,7 +272,6 @@ export const api: ServerApiContract = {
   scrape: {
     liveRuns: () => trpcQuery("scrape.liveRuns"),
     snapshot: (input) => trpcQuery("scrape.snapshot", input),
-    pendingUncensoredConfirmation: () => trpcQuery("scrape.pendingUncensoredConfirmation"),
     removeRecord: (input) => trpcMutation("scrape.removeRecord", input),
     history: (input) => trpcQuery("scrape.history", input),
     nfoRead: (input) => trpcQuery("scrape.nfoRead", input),
@@ -256,7 +283,6 @@ export const api: ServerApiContract = {
     resume: (input) => trpcMutation("scrape.resume", input),
     retry: (input) => trpcMutation("scrape.retry", input),
     rerunDirectory: (input) => trpcMutation("scrape.rerunDirectory", input),
-    confirmUncensored: (input) => trpcMutation("scrape.confirmUncensored", input),
     start: (input) => trpcMutation("scrape.start", input),
     stop: (input) => trpcMutation("scrape.stop", input),
   },

@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { LibraryRepository } from "@mdcz/persistence";
 import type { PreparedMovieOutput } from "./movieArtifacts";
 import type { PublicationLibraryAsset } from "./outputLibrary";
@@ -13,6 +14,7 @@ export interface CommittedMovieFile {
   readonly resolution?: string | null;
   readonly entryIdentity: string;
   readonly sourceEntryIdentity: string;
+  readonly retainedSourceIdentity?: string;
 }
 
 export interface CommittedMovieAsset extends PublicationLibraryAsset {
@@ -38,7 +40,7 @@ export const toCommittedMovie = (
   if (!group || !output.files.length) {
     throw new Error("Committed movie requires metadata and files");
   }
-  const identity = group.crawlerData.number.trim() || output.files[0].scrape?.identity.fileName;
+  const identity = group.crawlerData.number.trim() || basename(output.files[0].source.relativePath);
   if (!identity) throw new Error("Committed movie has no media identity");
   const crawlerDataJson = JSON.stringify(group.crawlerData);
 
@@ -76,13 +78,14 @@ export const toCommittedMovie = (
       resolution: facts?.resolution ?? null,
       entryIdentity: video.entryIdentity,
       sourceEntryIdentity: video.sourceEntryIdentity,
+      retainedSourceIdentity: video.retainedSourceIdentity,
     });
   });
 
   return Object.freeze({
     id: output.movieId,
     mediaIdentity: identity,
-    number: identity,
+    number: group.crawlerData.number,
     title: group.crawlerData.title,
     actors: Object.freeze([...group.crawlerData.actors]),
     crawlerDataJson,
@@ -107,6 +110,7 @@ export const committedMovieRows = (movie: CommittedMovie) => ({
     fileId: file.fileId,
     entryIdentity: file.entryIdentity,
     sourceEntryIdentity: file.sourceEntryIdentity,
+    retainedSourceIdentity: file.retainedSourceIdentity,
     rootId: file.rootId,
     rootRelativePath: file.rootRelativePath,
     size: file.size,

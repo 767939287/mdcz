@@ -76,6 +76,7 @@ const createContext = (mediaRoots?: {
       return root;
     });
   const library = {
+    knownMediaIdentities: () => new Set<string>(),
     publicationRoots: () => [],
     publicationSnapshot: () => ({ files: [], assets: [] }),
     writeEntry: vi.fn(() => "item"),

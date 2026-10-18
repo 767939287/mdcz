@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createMediaRoot } from "@mdcz/media-store";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTempDirectory } from "../../../tests/harness/tempDirectory";
@@ -9,7 +9,9 @@ import { PersistenceError, persistenceErrorCodes } from "./errors";
 import { LibraryRepository, selectRepresentativeFile } from "./libraryRepository";
 import { MediaRootRepository } from "./mediaRootRepository";
 import { defaultMigrationsFolder, runMigrations } from "./migrate";
+import { PendingRepository } from "./pendingRepository";
 import { ScanTaskRepository } from "./scanTaskRepository";
+import { SiteResultRepository } from "./siteResultRepository";
 import { createTestPersistenceDatabase } from "./testDatabase";
 
 let database: PersistenceDatabase | undefined;
@@ -179,7 +181,7 @@ describe("Persistence migrations", () => {
       expect(database.sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'scrape_runs'").all()).toEqual([
         { name: "scrape_runs" },
       ]);
-      expect(database.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 6 });
+      expect(database.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 7 });
 
       expect(
         database.sqlite.prepare("SELECT task_id, root_id, relative_path, size, modified_at FROM scan_results").all(),
@@ -247,7 +249,7 @@ describe("Persistence migrations", () => {
       runMigrations(database);
       runMigrations(database);
 
-      expect(database.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 6 });
+      expect(database.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 7 });
       expect(database.sqlite.prepare("SELECT id, root_id, status FROM scan_tasks").all()).toEqual([
         { id: "scan-1", root_id: "root-1", status: "completed" },
       ]);
@@ -306,7 +308,7 @@ describe("Persistence migrations", () => {
       runMigrations(database, { migrationsFolder: migrations.path });
       runMigrations(database);
 
-      expect(database.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 4 });
+      expect(database.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 5 });
       const fresh = createTestPersistenceDatabase();
       try {
         expect(readSchema(database)).toEqual(readSchema(fresh));
@@ -496,39 +498,26 @@ describe("LibraryRepository", () => {
     ]);
   });
 
-  it("lists pending uncensored library entries", async () => {
+  it("keeps one pending entry per source file, replaced by its newest outcome", async () => {
     database = createTestPersistenceDatabase();
     await addRoots("root-1");
-    const repository = new LibraryRepository(database);
-    await repository.upsertEntry({
-      movie: {
-        id: "entry-1",
-        uncensoredAmbiguous: true,
-        assets: [{ kind: "poster", uri: "A.jpg", rootId: "root-1", relativePath: "A.jpg" }],
-      },
-      files: [
-        {
-          rootId: "root-1",
-          rootRelativePath: "A.mp4",
-          assets: [],
-          fileId: "root-1:A.mp4",
-        },
-      ],
-    });
-    await repository.upsertEntry({
-      movie: { id: "entry-2", uncensoredAmbiguous: false },
-      files: [
-        {
-          rootId: "root-1",
-          rootRelativePath: "B.mp4",
-          fileId: "root-1:B.mp4",
-        },
-      ],
-    });
+    const pending = new PendingRepository(database);
 
-    const pending = await repository.listPendingUncensored();
-    expect(pending.map((e) => e.id)).toEqual(["entry-1"]);
-    expect(pending[0].uncensoredAmbiguous).toBe(true);
+    expect(pending.upsert({ kind: "no_number", rootId: "root-1", relativePath: "A.mp4" })).toBe(true);
+    expect(pending.upsert({ kind: "new_file", rootId: "root-1", relativePath: "B.mp4" })).toBe(true);
+    expect(
+      pending.upsert(
+        { kind: "ambiguous", rootId: "root-1", relativePath: "A.mp4", number: "SW-130", candidatesJson: "[]" },
+        new Date(Date.now() + 1000),
+      ),
+    ).toBe(false);
+    expect(pending.list().map(({ kind, relativePath, number }) => ({ kind, relativePath, number }))).toEqual([
+      { kind: "ambiguous", relativePath: "A.mp4", number: "SW-130" },
+      { kind: "new_file", relativePath: "B.mp4", number: null },
+    ]);
+
+    pending.deleteFiles([{ rootId: "root-1", relativePath: "A.mp4" }]);
+    expect(pending.list().map((item) => item.relativePath)).toEqual(["B.mp4"]);
   });
 
   it("paginates library entries with a stable created-at and id cursor", async () => {
@@ -613,6 +602,99 @@ describe("LibraryRepository", () => {
       entries: [expect.objectContaining({ id: "entry-2" })],
       total: 1,
     });
+  });
+
+  it("summarizes library health and facets and filters by them within a library's directories", async () => {
+    database = createTestPersistenceDatabase();
+    await addRoots("root-1", "root-2");
+    const repository = new LibraryRepository(database);
+    const asset = (rootId: string, kind: string, relativePath: string) => ({
+      kind,
+      uri: relativePath,
+      rootId,
+      relativePath,
+    });
+    const crawlerDataJson = (data: object) => JSON.stringify(data);
+    await repository.upsertEntry({
+      movie: {
+        id: "healthy",
+        number: "ABC-123",
+        actors: ["Alice"],
+        crawlerDataJson: crawlerDataJson({ plot: "A plot", studio: "S1", genres: ["drama"] }),
+        assets: ["poster", "fanart", "nfo"].map((kind) => asset("root-1", kind, `abc/${kind}`)),
+      },
+      files: [{ rootId: "root-1", rootRelativePath: "abc/ABC-123.mp4" }],
+    });
+    await repository.upsertEntry({
+      movie: {
+        id: "bare",
+        number: "abc-123",
+        actors: ["Alice", "Bob"],
+        crawlerDataJson: crawlerDataJson({ plot: " ", studio: "S1", genres: ["drama", "3p"] }),
+      },
+      files: [{ rootId: "root-2", rootRelativePath: "abc/ABC-123.mp4" }],
+    });
+    await repository.upsertEntry({
+      movie: {
+        id: "translated",
+        number: "",
+        actors: ["Bob"],
+        crawlerDataJson: crawlerDataJson({ plot_zh: "译文", studio: "S2", genres: [] }),
+        assets: [asset("root-1", "nfo", "def/movie.nfo")],
+      },
+      files: [{ rootId: "root-1", rootRelativePath: "def/DEF-456.mp4" }],
+    });
+    // Movies without a number never duplicate each other.
+    await repository.upsertEntry({
+      movie: {
+        id: "unnumbered",
+        number: "",
+        crawlerDataJson: crawlerDataJson({ plot: "A plot" }),
+        assets: ["poster", "fanart", "nfo"].map((kind) => asset("root-1", kind, `none/${kind}`)),
+      },
+      files: [{ rootId: "root-1", rootRelativePath: "none/clip.mp4" }],
+    });
+
+    expect(repository.summary({})).toEqual({
+      total: 4,
+      issues: { missingPoster: 2, missingBackdrop: 2, missingSynopsis: 1, noNfo: 1, duplicate: 2 },
+      facets: {
+        actors: [
+          { name: "Alice", count: 2 },
+          { name: "Bob", count: 2 },
+        ],
+        studios: [
+          { name: "S1", count: 2 },
+          { name: "S2", count: 1 },
+        ],
+        tags: [
+          { name: "drama", count: 2 },
+          { name: "3p", count: 1 },
+        ],
+      },
+    });
+    expect(repository.summary({ pathPrefixes: [`${resolve("/root-1")}/`] }).issues).toEqual({
+      missingPoster: 1,
+      missingBackdrop: 1,
+      missingSynopsis: 0,
+      noNfo: 0,
+      duplicate: 0,
+    });
+    const ids = async (filter: object) =>
+      (await repository.listEntriesPage({ limit: 10, ...filter })).entries.map((entry) => entry.id).sort();
+    await expect(ids({ health: "noNfo" })).resolves.toEqual(["bare"]);
+    expect(repository.summary({ includeBackdrop: false })).toEqual({
+      ...repository.summary({}),
+      issues: { ...repository.summary({}).issues, missingBackdrop: 0 },
+    });
+    await expect(ids({ health: "missingBackdrop", includeBackdrop: false })).resolves.toEqual([]);
+    await expect(ids({ health: "missingBackdrop", includeBackdrop: true })).resolves.toEqual(["bare", "translated"]);
+    // The other copy lives in a different library, so neither side counts it.
+    await expect(ids({ health: "duplicate", pathPrefixes: [resolve("/root-1")] })).resolves.toEqual([]);
+    await expect(ids({ health: "duplicate" })).resolves.toEqual(["bare", "healthy"]);
+    await expect(ids({ actor: "Bob" })).resolves.toEqual(["bare", "translated"]);
+    await expect(ids({ studio: "S2", tag: "drama" })).resolves.toEqual([]);
+    await expect(ids({ tag: "3p" })).resolves.toEqual(["bare"]);
   });
 
   it("includes all registered roots and treats LIKE metacharacters literally", async () => {
@@ -916,6 +998,58 @@ describe("LibraryRepository", () => {
         id: "entry-2",
         files: [expect.objectContaining({ rootRelativePath: "DEF-456/DEF-456.mp4" })],
       }),
+    ]);
+  });
+});
+
+describe("SiteResultRepository", () => {
+  it("keeps the latest outcome per site and the site's last answer about the movie", () => {
+    database = createTestPersistenceDatabase();
+    const siteResults = new SiteResultRepository(database);
+    const data = { title: "DMM Title" };
+    const latest = () =>
+      siteResults
+        .list("snos-301")
+        .map(({ site, status, reason, skipReason, data }) => ({ site, status, reason, skipReason, data }));
+
+    siteResults.record(" snos-301 ", [
+      { site: "dmm", status: "success", elapsedMs: 900, data },
+      { site: "javdb", status: "success", elapsedMs: 1200, data: { title: "JavDB Title" } },
+    ]);
+    siteResults.record("SNOS-301", [
+      { site: "dmm", status: "failed", reason: "timeout", detail: "budget", elapsedMs: 20_000 },
+      { site: "javdb", status: "failed", reason: "not_found", httpStatus: 404, elapsedMs: 300 },
+    ]);
+    expect(latest()).toEqual([
+      { site: "dmm", status: "failed", reason: "timeout", skipReason: undefined, data },
+      { site: "javdb", status: "failed", reason: "not_found", skipReason: undefined, data: undefined },
+    ]);
+
+    siteResults.record("SNOS-301", [
+      { site: "dmm", status: "skipped", skipReason: "unavailable", reason: "region_blocked", elapsedMs: 0 },
+    ]);
+    expect(latest()[0]).toEqual({
+      site: "dmm",
+      status: "skipped",
+      reason: "region_blocked",
+      skipReason: "unavailable",
+      data,
+    });
+
+    siteResults.record("SNOS-301", [
+      { site: "javdb", status: "success", elapsedMs: 800, data: { title: "Pinned" }, sourceUrl: "https://javdb/v/1" },
+    ]);
+    expect(siteResults.list("SNOS-301")[1]).toMatchObject({
+      data: { title: "Pinned" },
+      sourceUrl: "https://javdb/v/1",
+    });
+
+    // No stored answer for a number naming several works can be attributed to one of them, whatever site holds it.
+    siteResults.record("SNOS-301", [{ site: "avbase", status: "failed", reason: "ambiguous", elapsedMs: 400 }]);
+    expect(siteResults.list("SNOS-301").map(({ site, data, sourceUrl }) => ({ site, data, sourceUrl }))).toEqual([
+      { site: "avbase", data: undefined, sourceUrl: undefined },
+      { site: "dmm", data: undefined, sourceUrl: undefined },
+      { site: "javdb", data: undefined, sourceUrl: undefined },
     ]);
   });
 });

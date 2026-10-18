@@ -153,9 +153,54 @@ export const settings = {
       ],
     },
   },
-  sharedDirectoryNotice: {
-    lead: "This folder template doesn't create a separate folder per movie, so shared directory mode applies. The recommended default is ",
-    tail: "; if you do want a shared directory, the related naming rules are validated on save.",
+  templatesMovedNotice:
+    "Folder and file name templates are set per library, together with the output directory and how videos are placed.",
+  notificationChannels: { telegram: "Telegram", bark: "Bark", ntfy: "ntfy" },
+  pathMappings: {
+    from: "Downloader path",
+    to: "MDCz path",
+    fromPlaceholder: "/downloads",
+    toPlaceholder: "/mnt/media/downloads",
+    add: "Add mapping",
+    remove: "Remove mapping",
+  },
+  integrations: {
+    access: "Downloader access",
+    accessDescription: "Allows downloaders and cloud tools to access automation APIs (cannot log into the web UI).",
+    notifications: "Notifications",
+    keyName: "Key name",
+    keyNamePlaceholder: "qBittorrent",
+    create: "Create key",
+    created: "Copy this key now; it will not be shown again.",
+    copy: "Copy",
+    copied: "Copied",
+    revoke: "Revoke",
+    lastUsed: (value: string | null) => (value ? `Last used ${value}` : "Never used"),
+    noKeys: "No API keys yet.",
+    commandTitle: "Command on download finished",
+    commandHint:
+      'For downloaders MDCz does not poll. In qBittorrent, paste into Options → Downloads → "Run external program on torrent finished"; %F is the finished file or folder. Feed a library set to hardlink so the torrent keeps seeding.',
+    clouddriveTitle: "CloudDrive2",
+    clouddriveHint:
+      "In CloudDrive2's file system watcher, POST to this URL with the header Authorization: Bearer <API key>.",
+    clouddriveLastEvent: (time: string | null) =>
+      time ? `Last event from CloudDrive2: ${time}` : "No event from CloudDrive2 since MDCz started.",
+    qbittorrent: "qBittorrent",
+    qbittorrentDescription:
+      "Polls and scrapes completed torrents in this category every minute (torrents finished before polling are skipped).",
+    qbittorrentOff: "Polling is off until the URL and category are set.",
+    qbittorrentError: (error: string) => `qBittorrent check failed: ${error}`,
+    qbittorrentChecked: (time: string, library: string | null) =>
+      library ? `Checked ${time}; finished torrents go to library ${library}.` : `Checked ${time}.`,
+    qbittorrentNoLibrary:
+      "Category save path is not inside any library's source directory. Add a library or path mapping.",
+    qbittorrentFailures: (count: number) =>
+      `${count} ${count === 1 ? "torrent was" : "torrents were"} not scraped; MDCz retries every minute:`,
+    addressHint:
+      "These use the address this browser sees. If the downloader runs in another container, replace it with an address that container can reach.",
+    sendTest: "Send test message",
+    sendingTest: "Sending…",
+    testSent: "Test message sent to every enabled channel",
   },
   testFailed: (error: string) => `Test failed: ${error}`,
   verifying: "Verifying…",
@@ -163,8 +208,6 @@ export const settings = {
   waitForAutosave: "Wait for autosave to finish before restarting the app",
   relaunchFailed: (error: string) => `Restart failed: ${error}`,
   relaunchApp: "Restart app",
-  metadataOnlyNotice: "Metadata only mode is on; moving and renaming videos is disabled.",
-  metadataPathRequired: "A metadata output directory is required when metadata only mode is on",
   sitePriority: {
     options: {
       dmm_family: {
@@ -175,7 +218,7 @@ export const settings = {
       official: {
         label: "Official studio sites",
         description:
-          "Studio and label sites such as MGStage, Prestige, Faleno, Dahlia and KM Produce. Good for their own titles, with narrow coverage; success varies widely by site and code.",
+          "Official studio websites, queried only for their own codes. Clean titles without actor names and unmasked plots, though typically not split into paragraphs.",
       },
       [Website.AVBASE]: {
         label: "avbase",
@@ -206,6 +249,11 @@ export const settings = {
       h0930_family: {
         label: "H0930 / H4610",
         description: "Self-run independent production sites that use their own codes (e.g. H0930/H4610).",
+      },
+      uncensored_official: {
+        label: "Uncensored studio sites",
+        description:
+          "1pondo, 10musume, Caribbeancom and HEYZO official metadata. Uses 1PON, 10MU, CARIB and HEYZO codes without a login.",
       },
       [Website.FC2]: {
         label: "fc2",
@@ -284,13 +332,7 @@ export const settings = {
       actorAliasEmpty: "Actor alias cannot be empty",
       actorAliasConflict: "Actor name conflicts with another alias group",
       globalTimeoutNotGreater: "Global timeout must be greater than per-crawler timeout",
-      metadataPathNotAbsolute: "Metadata output directory must be an absolute path",
-      sharedDirectoryAssetNaming: "In shared directory mode, asset naming must follow movie filename",
-      sharedDirectoryNfoNaming: 'In shared directory mode, NFO naming must be "<filename>.nfo only"',
-      sharedDirectorySceneImages:
-        "Downloading scene images is not supported in shared directory mode; please disable scene image downloads",
-      optionalSegmentPathSeparator:
-        "Optional segments [] cannot contain path separators; use optional segments only within a single path component",
+      actorPhotoFolderNotAbsolute: "The actor photo directory must be an absolute path",
       jellyfinUserIdNotUuid: "Jellyfin user ID must be a UUID, or leave empty for server default",
     } satisfies Record<ConfigIssueCode, string> as Record<string, string | undefined>,
   },

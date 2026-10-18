@@ -1,6 +1,5 @@
 import type { ServiceContainer } from "@main/container";
 import { type Configuration, configManager } from "@main/services/config";
-import { ActorPhotoFolderConfigurationError } from "@main/services/config/actorPhotoPath";
 import { loggerService } from "@main/services/LoggerService";
 import {
   checkConnection as checkEmbyConnection,
@@ -22,6 +21,7 @@ import {
   toolAmazonPosterApplyInputSchema,
   toolAmazonPosterLookupInputSchema,
   toolBatchTranslateApplyInputSchema,
+  toolBatchTranslateScanInputSchema,
   toolCreateSymlinkInputSchema,
   toolDirectoryInputSchema,
   toolMediaServerModeInputSchema,
@@ -116,16 +116,8 @@ export const createToolHandlers = (
   const ensureJellyfinReady = () => ensureMediaServerReady("jellyfin", "Jellyfin");
   const ensureEmbyReady = () => ensureMediaServerReady("emby", "Emby");
 
-  const rethrowMediaServerError = (
-    error: unknown,
-    errorType: MediaServerErrorCtor,
-    options: { includeActorPhotoFolderError?: boolean } = {},
-  ): void => {
+  const rethrowMediaServerError = (error: unknown, errorType: MediaServerErrorCtor): void => {
     if (error instanceof errorType) {
-      throw createIpcError(error.code, error.message);
-    }
-
-    if (options.includeActorPhotoFolderError && error instanceof ActorPhotoFolderConfigurationError) {
       throw createIpcError(error.code, error.message);
     }
   };
@@ -147,7 +139,6 @@ export const createToolHandlers = (
     operation: string,
     options: MediaServerHandlerOptions,
     service: MediaServerRunner<PersonSyncResult>,
-    extra: { includeActorPhotoFolderError?: boolean } = {},
   ) =>
     t.procedure.input(toolMediaServerModeInputSchema).action(async ({ input }): Promise<PersonSyncResult> => {
       try {
@@ -159,7 +150,7 @@ export const createToolHandlers = (
         const configuration = await options.ensureReady();
         return await service.run(configuration, mode);
       } catch (error) {
-        rethrowMediaServerError(error, options.errorType, extra);
+        rethrowMediaServerError(error, options.errorType);
         return raiseHandlerError(operation, error);
       }
     });
@@ -194,7 +185,6 @@ export const createToolHandlers = (
       jellyfinHandlers.syncPhotoOperation,
       jellyfinHandlers,
       jellyfinHandlers.photoService,
-      { includeActorPhotoFolderError: true },
     ),
     [IpcChannel.Tool_JellyfinActorInfoSync]: createMediaServerSyncHandler(
       jellyfinHandlers.syncInfoOperation,
@@ -206,7 +196,6 @@ export const createToolHandlers = (
       embyHandlers.syncPhotoOperation,
       embyHandlers,
       embyHandlers.photoService,
-      { includeActorPhotoFolderError: true },
     ),
     [IpcChannel.Tool_EmbyActorInfoSync]: createMediaServerSyncHandler(
       embyHandlers.syncInfoOperation,
@@ -287,21 +276,23 @@ export const createToolHandlers = (
           return raiseHandlerError("Tool_AmazonPosterApply", error);
         }
       }),
-    [IpcChannel.Tool_BatchTranslateScan]: t.procedure.input(toolDirectoryInputSchema).action(async ({ input }) => {
-      try {
-        const directory = input?.directory?.trim();
-        if (!directory) {
-          throw createIpcError(IpcErrorCode.INVALID_ARGUMENT, "Directory is required");
-        }
+    [IpcChannel.Tool_BatchTranslateScan]: t.procedure
+      .input(toolBatchTranslateScanInputSchema)
+      .action(async ({ input }) => {
+        try {
+          const directory = input?.directory?.trim();
+          if (!directory) {
+            throw createIpcError(IpcErrorCode.INVALID_ARGUMENT, "Directory is required");
+          }
 
-        const configuration = await configManager.getValidated();
-        return {
-          items: await batchTranslateToolService.scan(directory, configuration),
-        };
-      } catch (error) {
-        return raiseHandlerError("Tool_BatchTranslateScan", error);
-      }
-    }),
+          const configuration = await configManager.getValidated();
+          return {
+            items: await batchTranslateToolService.scan(directory, input.mode, configuration),
+          };
+        } catch (error) {
+          return raiseHandlerError("Tool_BatchTranslateScan", error);
+        }
+      }),
     [IpcChannel.Tool_BatchTranslateApply]: t.procedure
       .input(toolBatchTranslateApplyInputSchema)
       .action(async ({ input }) => {
@@ -313,7 +304,10 @@ export const createToolHandlers = (
 
           const configuration = await configManager.getValidated();
           return {
-            results: await batchTranslateToolService.apply(items, configuration, { maxBatchItems: input?.batchSize }),
+            results: await batchTranslateToolService.apply(items, configuration, {
+              mode: input.mode,
+              maxBatchItems: input.batchSize,
+            }),
           };
         } catch (error) {
           return raiseHandlerError("Tool_BatchTranslateApply", error);

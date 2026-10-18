@@ -123,7 +123,10 @@ const normalizePartProbeName = (rawName: string, escapeStrings: string[] = []): 
 
 const findSuffixAfterNumber = (stem: string, number: string, escapeStrings: string[] = []): string | undefined => {
   const normalizedProbe = normalizePartProbeName(stem, escapeStrings);
-  const normalizedNumber = number.trim().toUpperCase();
+  const normalizedNumber = number
+    .trim()
+    .toUpperCase()
+    .replace(/[_\s]+/gu, "-");
   if (!normalizedNumber) {
     return undefined;
   }
@@ -151,6 +154,27 @@ type NumberExtractionRule = {
 const joinFirstTwoCaptures = (match: RegExpMatchArray): string => `${match[1]}-${match[2]}`;
 const formatFirstCapture = (prefix: string): NonNullable<NumberExtractionRule["format"]> => {
   return (match) => `${prefix}-${match[1]}`;
+};
+
+// Caribbeancompr is a separate studio that shares Caribbeancom's prefix.
+const DATE_SEQUENCE_STUDIO = "(?<studio>1PON(?:DO)?|10MU(?:SUME)?|CARIB(?:BEANCOM)?(?!PR))";
+const DATE_SEQUENCE = String.raw`(?<date>\d{6})[-_](?<sequence>\d{2,3})`;
+// Studio tags lead (`1pon-100524_001`) or trail (`100524_001-1pon`) the number.
+const TAGGED_DATE_SEQUENCE_PATTERNS = [
+  new RegExp(String.raw`${DATE_SEQUENCE_STUDIO}[-_.\s]*${DATE_SEQUENCE}(?!\d)`, "iu"),
+  new RegExp(String.raw`(?<!\d)${DATE_SEQUENCE}[-_.\s]*${DATE_SEQUENCE_STUDIO}`, "iu"),
+];
+
+const extractTaggedDateSequence = (fileName: string): string | undefined => {
+  for (const pattern of TAGGED_DATE_SEQUENCE_PATTERNS) {
+    const groups = fileName.match(pattern)?.groups;
+    if (!groups) continue;
+    const tag = groups.studio.toUpperCase();
+    const studio = tag.startsWith("CARIB") ? "CARIB" : tag.slice(0, 4);
+    if ((studio === "10MU") !== (groups.sequence.length === 2)) continue;
+    return `${studio}-${groups.date}${studio === "CARIB" ? "-" : "_"}${groups.sequence}`;
+  }
+  return undefined;
 };
 
 const ORDERED_NUMBER_EXTRACTION_RULES: NumberExtractionRule[] = [
@@ -182,18 +206,26 @@ const ORDERED_NUMBER_EXTRACTION_RULES: NumberExtractionRule[] = [
 ];
 
 export const extractNumber = (fileName: string, escapeStrings: string[] = []): string => {
-  const normalized = normalizeRawName(fileName, escapeStrings);
-
-  for (const { pattern, format } of ORDERED_NUMBER_EXTRACTION_RULES) {
-    const match = normalized.match(pattern);
-    if (!match) {
-      continue;
-    }
-
-    return normalizeNumber(format ? format(match) : (match[1] ?? match[0]));
+  const taggedDateSequence = extractTaggedDateSequence(fileName);
+  if (taggedDateSequence) {
+    return taggedDateSequence;
   }
 
-  return normalizeNumber(normalized);
+  const normalized = normalizeRawName(fileName, escapeStrings);
+  const rule = ORDERED_NUMBER_EXTRACTION_RULES.find(({ pattern }) => pattern.test(normalized));
+  const match = rule ? normalized.match(rule.pattern) : null;
+  // A name no rule matches has no number; returning the whole name would become a pseudo-number that queries every
+  // site instead of parking the file as `no_number`.
+  if (!rule || !match) return "";
+  const number = normalizeNumber(rule.format?.(match) ?? match[1] ?? match[0]);
+
+  // Name normalization turns every separator into "-", but in a bare date-sequence number "_" and "-" name
+  // different studios, so the separator is read back from the original name.
+  const dateSequence = number.match(/^(\d{6})-(\d{2,3})$/u);
+  return dateSequence
+    ? (fileName.match(new RegExp(String.raw`(?<!\d)${dateSequence[1]}[-_]${dateSequence[2]}(?!\d)`, "u"))?.[0] ??
+        number)
+    : number;
 };
 
 const detectNamedPart = (stem: string, number: string): FileInfo["part"] | undefined => {
@@ -323,11 +355,19 @@ const detectAlphabeticPart = (
   };
 };
 
-export const parseFileInfo = (filePath: string, escapeStrings: string[] = []): FileInfo => {
+/** `numberMappings` (file name keyword -> number) wins over parsing, for names no rule can read. */
+export const parseFileInfo = (
+  filePath: string,
+  escapeStrings: readonly string[] = [],
+  numberMappings: Readonly<Record<string, string>> = {},
+): FileInfo => {
   const extension = extname(filePath);
   const stem = basename(filePath, extension);
   const normalizedStem = stem.normalize("NFC");
   const normalizedUpper = normalizedStem.toUpperCase();
+  const mapped = Object.entries(numberMappings).find(([match]) =>
+    normalizedUpper.includes(match.normalize("NFC").toUpperCase()),
+  )?.[1];
 
   const crackedCuMatch = normalizedUpper.match(CRACKED_CU_PATTERN);
   const subtitleTag = detectChineseSubtitleTagInFileName(
@@ -336,12 +376,13 @@ export const parseFileInfo = (filePath: string, escapeStrings: string[] = []): F
   const uncensoredMatch = normalizedUpper.match(UNCENSORED_PATTERN);
   const umrMatch = normalizedStem.match(UMR_PATTERN);
   const resolutionMatch = RESOLUTION_PATTERNS.map((pattern) => normalizedUpper.match(pattern)).find(Boolean);
-  const number = extractNumber(normalizedStem, escapeStrings);
+  const tokens = [...escapeStrings];
+  const number = mapped?.trim().toUpperCase() ?? extractNumber(normalizedStem, tokens);
   const part =
     detectNamedPart(normalizedStem, number) ??
-    detectBareNumericPart(normalizedStem, number, escapeStrings) ??
-    detectAlphabeticPart(normalizedStem, number, escapeStrings) ??
-    detectCircledPart(normalizedStem, number, escapeStrings);
+    detectBareNumericPart(normalizedStem, number, tokens) ??
+    detectAlphabeticPart(normalizedStem, number, tokens) ??
+    detectCircledPart(normalizedStem, number, tokens);
 
   return {
     filePath,

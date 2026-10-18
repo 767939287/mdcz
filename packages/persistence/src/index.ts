@@ -1,7 +1,13 @@
+export * from "./credentialRepository";
 export * from "./database";
+export * from "./downloaderRepository";
 export * from "./errors";
 export * from "./libraryRepository";
+export * from "./mediaLibraryRepository";
 export * from "./mediaRootRepository";
 export * from "./migrate";
+export * from "./pendingRepository";
 export * from "./scanTaskRepository";
+export { PENDING_KINDS, type PendingKind } from "./schema";
 export * from "./scrapeRunRepository";
+export * from "./siteResultRepository";

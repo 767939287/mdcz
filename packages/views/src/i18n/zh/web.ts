@@ -8,6 +8,7 @@ export const web: Messages["web"] = {
   password: "密码",
   loggingIn: "正在登录...",
   login: "登录",
+  incorrectPassword: "管理员密码错误",
 
   initAdminTitle: "初始化管理员账户",
   passwordsDoNotMatch: "两次输入的密码不一致",

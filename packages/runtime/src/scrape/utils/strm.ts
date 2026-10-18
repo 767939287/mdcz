@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, posix, resolve, win32 } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { atomicWriteFile } from "@mdcz/media-store";
 import { localPathStyle } from "@mdcz/shared/localPath";
@@ -17,6 +17,29 @@ export interface StrmTargetInfo {
 }
 
 export const isStrmFile = (filePath: string): boolean => extname(filePath).toLowerCase() === ".strm";
+
+const UNREADABLE_DIRECTORY_CODES = new Set(["ENOENT", "ENOTDIR", "EACCES", "EPERM"]);
+
+/**
+ * Whether a directory holds .strm stubs, reading at most `maxEntries` entries breadth first so a huge tree stays cheap.
+ * A directory that is missing or unreadable holds none: this also probes paths still being typed.
+ */
+export const containsStrmFiles = async (directory: string, maxEntries = 2_000): Promise<boolean> => {
+  const queue = [directory];
+  let seen = 0;
+  for (let current = queue.shift(); current !== undefined && seen < maxEntries; current = queue.shift()) {
+    const entries = await readdir(current, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (UNREADABLE_DIRECTORY_CODES.has(error.code ?? "")) return [];
+      throw error;
+    });
+    for (const entry of entries) {
+      seen += 1;
+      if (entry.isFile() && isStrmFile(entry.name)) return true;
+      if (entry.isDirectory()) queue.push(join(current, entry.name));
+    }
+  }
+  return false;
+};
 
 const parseStrmContent = (
   content: string,

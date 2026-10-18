@@ -160,6 +160,8 @@ export default defineConfig({
         },
         test: {
           name: "component",
+          // The projects run side by side, and the integration scenarios starve the browser of CPU.
+          testTimeout: 60000,
           include: [
             "tests/component/**/*.component.test.tsx",
             "apps/**/*.component.test.tsx",
@@ -170,6 +172,8 @@ export default defineConfig({
             headless: true,
             screenshotDirectory: ".tmp/vitest-screenshots",
             provider: playwright({
+              // The component tests assert Chinese UI text; the app picks its locale from navigator.language.
+              contextOptions: { locale: "zh-CN" },
               launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
             }),
             instances: [{ browser: "chromium" }],

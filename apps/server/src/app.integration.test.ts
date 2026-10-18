@@ -1,18 +1,21 @@
-import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deterministicMediaRootId } from "@mdcz/media-store";
+import { RECENT_ACQUISITION_LIMIT } from "@mdcz/runtime/library";
 import { defaultConfiguration } from "@mdcz/shared/config";
 import { Website } from "@mdcz/shared/enums";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   closeTestServers,
   createTempRoot,
+  createTestAggregation,
+  createTestLibrary,
   createTestServer,
   loginAsAdmin,
   releaseTestServer,
   startLocalHttpServer,
-  syncMediaRootFromConfig,
-  waitForScanTaskStatus,
+  startTestImageServer,
+  waitForScrapeRunStatus,
 } from "./app.testSupport";
 import { AuthService } from "./services/authService";
 import type { RuntimeActionService } from "./services/runtimeActionService";
@@ -37,19 +40,6 @@ const readStreamUntil = async (reader: ReadableStreamDefaultReader<Uint8Array>, 
   }
   return buffer;
 };
-
-const isWebhookTaskBody = (
-  body: unknown,
-  expected: { taskId: string; kind: string; status: string },
-): body is { taskId: string; kind: string; status: string } =>
-  typeof body === "object" &&
-  body !== null &&
-  "taskId" in body &&
-  "kind" in body &&
-  "status" in body &&
-  body.taskId === expected.taskId &&
-  body.kind === expected.kind &&
-  body.status === expected.status;
 
 const createFakeRuntimeActions = (): RuntimeActionService =>
   ({
@@ -147,7 +137,7 @@ describe("buildServer composition integration", () => {
     if (process.platform !== "win32") expect((await stat(statePath)).mode & 0o777).toBe(0o600);
     const status = await fastify.inject({ method: "GET", url: "/trpc/setup.status" });
     expect(status.json().result.data).toMatchObject({ configured: true, setupRequired: false, mediaRootCount: 0 });
-    const restartedAuth = new AuthService(services.config.runtimePaths, "");
+    const restartedAuth = new AuthService(services.config.runtimePaths, services.persistence, "");
     const winningPassword = results[0].statusCode === 200 ? password : "another-password";
     if (process.platform !== "win32") await chmod(statePath, 0o400);
     try {
@@ -348,30 +338,19 @@ describe("buildServer composition integration", () => {
     });
   });
 
-  it("adds configured media roots without disabling earlier roots", async () => {
-    const firstRoot = await createTempRoot("config-media-root-a");
-    const secondRoot = await createTempRoot("config-media-root-b");
-    const metadataPath = await createTempRoot("config-metadata-not-a-root");
+  it("registers each library's directories as media roots and rejects overlapping sources", async () => {
+    const firstRoot = await createTempRoot("library-root-a");
+    const secondRoot = await createTempRoot("library-root-b");
     const { fastify } = await createTestServer();
     const token = await loginAsAdmin(fastify);
 
-    const firstResponse = await fastify.inject({
+    await createTestLibrary(fastify, token, firstRoot);
+    await createTestLibrary(fastify, token, secondRoot, { placement: "inPlace", outputPath: "" });
+    const overlapping = await fastify.inject({
       method: "POST",
-      url: "/trpc/config.update",
+      url: "/trpc/libraries.create",
       headers: { authorization: `Bearer ${token}` },
-      payload: { paths: { mediaPath: firstRoot } },
-    });
-    const secondResponse = await fastify.inject({
-      method: "POST",
-      url: "/trpc/config.update",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { paths: { mediaPath: secondRoot } },
-    });
-    const metadataResponse = await fastify.inject({
-      method: "POST",
-      url: "/trpc/config.update",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { paths: { metadataPath, successOutputFolder: join(firstRoot, "offline-output") } },
+      payload: { name: "Nested", sourcePath: join(firstRoot, "nested"), placement: "inPlace" },
     });
     const rootsResponse = await fastify.inject({
       method: "GET",
@@ -379,43 +358,30 @@ describe("buildServer composition integration", () => {
       headers: { authorization: `Bearer ${token}` },
     });
 
-    const roots = rootsResponse.json().result.data.roots;
-    expect(firstResponse.statusCode).toBe(200);
-    expect(secondResponse.statusCode).toBe(200);
-    expect(metadataResponse.statusCode).toBe(200);
-    expect(roots).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: deterministicMediaRootId(firstRoot), hostPath: firstRoot }),
-        expect.objectContaining({ id: deterministicMediaRootId(secondRoot), hostPath: secondRoot }),
-      ]),
-    );
-    expect(roots).toHaveLength(2);
+    expect(overlapping.json().error.message).toContain("overlaps library");
+    expect(
+      rootsResponse
+        .json()
+        .result.data.roots.map((root: { hostPath: string }) => root.hostPath)
+        .sort(),
+    ).toEqual([firstRoot, secondRoot].sort());
   });
-
-  it("prepares a missing output directory before registering its root", async () => {
-    const parent = await createTempRoot("workbench-output-parent");
+  it("prepares a missing library output directory before registering its root", async () => {
+    const parent = await createTempRoot("library-output-parent");
+    const source = join(parent, "downloads");
     const outputPath = join(parent, "nested", "JAV_output");
-    const { fastify } = await createTestServer();
+    await mkdir(source);
+    const { fastify, services } = await createTestServer();
     const token = await loginAsAdmin(fastify);
 
-    const response = await fastify.inject({
-      method: "POST",
-      url: "/trpc/mediaRoots.prepareOutputDirectory",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { hostPath: outputPath },
-    });
+    await createTestLibrary(fastify, token, source, { placement: "hardlink", outputPath });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().result.data).toMatchObject({
-      id: deterministicMediaRootId(outputPath),
-      hostPath: outputPath,
-      relativeDirectory: "",
-    });
-    const outputStats = await stat(outputPath);
-    expect(outputStats.isDirectory()).toBe(true);
+    expect((await stat(outputPath)).isDirectory()).toBe(true);
+    expect((await services.mediaRoots.list()).roots).toContainEqual(
+      expect.objectContaining({ id: deterministicMediaRootId(outputPath), hostPath: outputPath }),
+    );
   });
-
-  it("rejects batch scrape requests without an explicit output root", async () => {
+  it("rejects scrape requests without a library", async () => {
     const { fastify } = await createTestServer();
     const token = await loginAsAdmin(fastify);
 
@@ -430,34 +396,32 @@ describe("buildServer composition integration", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("outputRootId");
+    expect(response.json().error.message).toContain("libraryId");
   });
+  it("adopts single-directory settings as the first library once and rejects an unavailable source", async () => {
+    const root = await createTempRoot("legacy-media-root");
+    const app = await createTestServer();
+    const { configPath } = app.services.config.runtimePaths;
+    await mkdir(join(configPath, ".."), { recursive: true });
+    await writeFile(configPath, `[paths]\nmediaPath = ${JSON.stringify(root)}\n[watch]\nenabled = true\n`, "utf8");
+    const token = await loginAsAdmin(app.fastify);
+    const libraries = async () =>
+      (await app.services.libraries.list()).map(({ sourcePath, automation }) => ({ sourcePath, automation }));
 
-  it("rejects an unavailable media path without committing unrelated configuration changes", async () => {
-    const root = await createTempRoot("config-media-root-rollback");
-    const { fastify, services } = await createTestServer();
-    const token = await loginAsAdmin(fastify);
-    await expect(services.config.update({ paths: { mediaPath: root } })).resolves.toMatchObject({
-      paths: { mediaPath: root },
-    });
+    expect(await libraries()).toEqual([{ sourcePath: root, automation: "scrape" }]);
+    const saved = await readFile(configPath, "utf8");
+    expect(saved).not.toContain("mediaPath");
+    expect(saved).not.toContain("[watch]");
 
-    const previous = await services.config.get();
-    const rootsBefore = await services.mediaRoots.list();
-    const response = await fastify.inject({
+    const response = await app.fastify.inject({
       method: "POST",
-      url: "/trpc/config.update",
+      url: "/trpc/libraries.create",
       headers: { authorization: `Bearer ${token}` },
-      payload: { paths: { mediaPath: join(root, "offline") }, network: { timeout: 37 } },
+      payload: { name: "Offline", sourcePath: join(root, "..", "offline"), placement: "inPlace" },
     });
-
-    expect(response.statusCode).toBe(500);
-    await expect(services.config.get()).resolves.toMatchObject({
-      paths: { mediaPath: previous.paths.mediaPath },
-      network: { timeout: previous.network.timeout },
-    });
-    await expect(services.mediaRoots.list()).resolves.toEqual(rootsBefore);
+    expect(response.statusCode).toBe(400);
+    expect(await libraries()).toEqual([{ sourcePath: root, automation: "scrape" }]);
   });
-
   it("exposes protected settings parity runtime actions through dedicated tRPC routers", async () => {
     const { fastify } = await createTestServer({ runtimeActions: createFakeRuntimeActions() });
     const token = await loginAsAdmin(fastify);
@@ -527,7 +491,7 @@ describe("buildServer composition integration", () => {
     const { fastify } = await createTestServer();
     const token = await loginAsAdmin(fastify);
 
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    const { rootId } = await createTestLibrary(fastify, token, root);
     const listResponse = await fastify.inject({
       method: "GET",
       url: "/trpc/mediaRoots.list",
@@ -563,13 +527,13 @@ describe("buildServer composition integration", () => {
     expect(updateResponse.statusCode).toBe(404);
   });
 
-  it("builds overview fallback output from library entries independently of recent visibility", async () => {
+  it("sums overview output over every library entry independently of recent visibility", async () => {
     const root = await createTempRoot("overview-root");
     await writeFile(join(root, "visible.mp4"), "visible");
     await writeFile(join(root, "hidden.mp4"), "hidden entry bytes");
     const { fastify, services } = await createTestServer();
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    const { rootId } = await createTestLibrary(fastify, token, root);
     const state = await services.persistence.getState();
     await state.repositories.library.upsertEntry({
       movie: { id: "visible-entry", title: null, number: "ABC-002", createdAt: new Date("2026-05-11T00:00:00.000Z") },
@@ -611,14 +575,9 @@ describe("buildServer composition integration", () => {
     });
 
     expect(overviewResponse.statusCode).toBe(200);
-    expect(overviewResponse.json().result.data.output).toEqual({
-      fileCount: 10,
-      totalBytes: 33,
-      outputAt: "2026-05-11T00:08:00.000Z",
-      rootPath: null,
-    });
+    expect(overviewResponse.json().result.data.output).toEqual({ fileCount: 10, totalBytes: 33 });
     const recentAcquisitions = overviewResponse.json().result.data.recentAcquisitions;
-    expect(recentAcquisitions).toHaveLength(8);
+    expect(recentAcquisitions).toHaveLength(RECENT_ACQUISITION_LIMIT);
     expect(recentAcquisitions[0]).toMatchObject({
       id: "newer-entry-7",
       number: "ABC-107",
@@ -633,7 +592,7 @@ describe("buildServer composition integration", () => {
     await writeFile(join(root, "present-b.mp4"), "b");
     const { fastify, services } = await createTestServer();
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    const { rootId } = await createTestLibrary(fastify, token, root);
     const state = await services.persistence.getState();
     for (const [id, relativePath, createdAt] of [
       ["entry-a", "present-a.mp4", "2026-05-01T00:00:00.000Z"],
@@ -687,7 +646,6 @@ describe("buildServer composition integration", () => {
         expect.objectContaining({
           id: "entry-c",
           available: "unchecked",
-          fileRefs: expect.arrayContaining([expect.objectContaining({ runId: null, scrapeOutcomeId: null })]),
         }),
         expect.objectContaining({ id: "entry-b", available: "unchecked" }),
       ],
@@ -721,7 +679,7 @@ describe("buildServer composition integration", () => {
     const root = await createTempRoot("actor-profile-root");
     const { fastify, services } = await createTestServer();
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    const { rootId } = await createTestLibrary(fastify, token, root);
     const state = await services.persistence.getState();
 
     expect(await services.library.listActorProfiles()).toEqual([]);
@@ -751,7 +709,7 @@ describe("buildServer composition integration", () => {
     const root = await createTempRoot("browser-root");
     const { fastify } = await createTestServer();
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    const { rootId } = await createTestLibrary(fastify, token, root);
 
     const response = await fastify.inject({
       method: "GET",
@@ -770,7 +728,7 @@ describe("buildServer composition integration", () => {
     await writeFile(join(root, "Alpha.txt"), "not a directory");
     const { fastify } = await createTestServer();
     const token = await loginAsAdmin(fastify);
-    await syncMediaRootFromConfig(fastify, token, root);
+    await createTestLibrary(fastify, token, root);
 
     const typedResponse = await fastify.inject({
       method: "POST",
@@ -794,86 +752,200 @@ describe("buildServer composition integration", () => {
     );
   });
 
-  it("protects automation REST endpoints and returns durable webhook payloads", async () => {
+  it("authorizes automation endpoints with revocable API keys and scrapes a downloader's path", async () => {
     const root = await createTempRoot("automation-root");
-    await writeFile(join(root, "auto.mp4"), "video");
-    const { fastify } = await createTestServer();
-    const unauthorizedResponse = await fastify.inject({
-      method: "GET",
-      url: "/api/automation/library/recent",
-    });
+    await writeFile(join(root, "ABC-123.mp4"), "video");
+    const image = await startTestImageServer();
+    const { fastify } = await createTestServer({ scrapeAggregation: createTestAggregation(`${image.url}/cover.png`) });
+    const unauthorizedResponse = await fastify.inject({ method: "GET", url: "/api/automation/library/recent" });
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    await createTestLibrary(fastify, token, root, { placement: "hardlink", automation: "scrape" });
+    const created = await fastify.inject({
+      method: "POST",
+      url: "/trpc/apiKeys.create",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: "qBittorrent" },
+    });
+    const { key, secret } = created.json().result.data;
+    const automation = { authorization: `Bearer ${secret}` };
 
     const startResponse = await fastify.inject({
       method: "POST",
-      url: "/api/automation/scrape/start",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { rootId },
+      url: `/api/automation/scrape/start?path=${encodeURIComponent(join(root, "ABC-123.mp4"))}`,
+      headers: automation,
     });
     const taskId = startResponse.json().task.id;
-
-    await waitForScanTaskStatus(fastify, token, taskId, "completed");
-
+    await waitForScrapeRunStatus(fastify, token, taskId, "completed");
+    // A second callback for a source the library already holds queues nothing and publishes no second version.
+    const duplicateResponse = await fastify.inject({
+      method: "POST",
+      url: `/api/automation/scrape/start?path=${encodeURIComponent(join(root, "ABC-123.mp4"))}`,
+      headers: automation,
+    });
+    expect(duplicateResponse.json()).toMatchObject({ task: null, webhook: null, duplicate: true });
     const recentResponse = await fastify.inject({
       method: "GET",
       url: "/api/automation/library/recent?limit=1",
+      headers: automation,
+    });
+    const silentCloudDrive = await fastify.inject({
+      method: "GET",
+      url: "/trpc/integrations.status",
       headers: { authorization: `Bearer ${token}` },
     });
+    const cloudDrive = await fastify.inject({
+      method: "POST",
+      url: "/api/webhooks/clouddrive",
+      headers: automation,
+      payload: {
+        device_name: "nas",
+        user_name: "user",
+        version: "1",
+        event_category: "file",
+        event_name: "notify",
+        data: [],
+      },
+    });
+    const reachedCloudDrive = await fastify.inject({
+      method: "GET",
+      url: "/trpc/integrations.status",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    // An API key reaches only the automation endpoints, and stops working once revoked.
+    const keyOnSettings = await fastify.inject({ method: "GET", url: "/trpc/config.read", headers: automation });
+    await fastify.inject({
+      method: "POST",
+      url: "/trpc/apiKeys.delete",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { id: key.id },
+    });
+    const revoked = await fastify.inject({ method: "GET", url: "/api/automation/library/recent", headers: automation });
 
-    expect(unauthorizedResponse.statusCode).toBe(500);
+    expect(unauthorizedResponse.statusCode).toBe(401);
     expect(unauthorizedResponse.json().message).toContain("Authentication required");
     expect(startResponse.statusCode).toBe(200);
-    expect(startResponse.json().webhook).toEqual({
-      taskId,
-      kind: "scan",
-      status: "queued",
-      startedAt: null,
-      completedAt: null,
-      summary: `Scan ${root.split(/[\\/]+/u).at(-1)}: queued`,
-      errors: [],
-    });
-    expect(recentResponse.statusCode).toBe(200);
-    expect(recentResponse.json().tasks[0]).toMatchObject({
-      taskId,
-      kind: "scan",
-      status: "completed",
-      summary: `Scan ${root.split(/[\\/]+/u).at(-1)}: completed`,
-      errors: [],
-    });
+    expect(startResponse.json().webhook).toMatchObject({ taskId, kind: "scrape", errors: [] });
+    expect(recentResponse.json().tasks[0]).toMatchObject({ taskId, kind: "scrape", status: "completed" });
     expect(recentResponse.json().tasks[0].completedAt).toEqual(expect.any(String));
+    expect(cloudDrive.statusCode).toBe(204);
+    expect(silentCloudDrive.json().result.data.cloudDrive.lastEventAt).toBeNull();
+    expect(reachedCloudDrive.json().result.data.cloudDrive.lastEventAt).toEqual(expect.any(String));
+    expect(keyOnSettings.statusCode).toBe(401);
+    expect(revoked.statusCode).toBe(401);
+  });
+  it("polls a qBittorrent category, scrapes each torrent that finished after polling began once, and keeps it seeding", async () => {
+    const root = await createTempRoot("qbittorrent-root");
+    const outside = await createTempRoot("qbittorrent-outside");
+    await writeFile(join(root, "ABC-123.mp4"), "video");
+    await writeFile(join(root, "OLD-001.mp4"), "video");
+    const finishedAt = Math.floor(Date.now() / 1000) + 3600;
+    const requests: string[] = [];
+    const qbittorrent = await startLocalHttpServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://qbittorrent.test");
+      requests.push(url.pathname);
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        if (url.pathname === "/api/v2/auth/login") {
+          const form = new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+          const accepted = form.get("username") === "admin" && form.get("password") === "secret";
+          response.writeHead(200, accepted ? { "set-cookie": "SID=session; HttpOnly; path=/" } : {});
+          response.end(accepted ? "Ok." : "Fails.");
+          return;
+        }
+        if (request.headers.cookie !== "SID=session") {
+          response.writeHead(403);
+          response.end("Forbidden");
+          return;
+        }
+        const body =
+          url.pathname === "/api/v2/torrents/categories"
+            ? { jav: { name: "jav", savePath: root } }
+            : url.searchParams.get("filter") === "completed" && url.searchParams.get("category") === "jav"
+              ? [
+                  // Finished before polling began: already there when qBittorrent was connected.
+                  { hash: "old", name: "OLD-001", content_path: join(root, "OLD-001.mp4"), completion_on: 1 },
+                  { hash: "new", name: "ABC-123", content_path: join(root, "ABC-123.mp4"), completion_on: finishedAt },
+                  {
+                    hash: "stray",
+                    name: "Elsewhere",
+                    content_path: join(outside, "XYZ-999.mp4"),
+                    completion_on: finishedAt,
+                  },
+                ]
+              : [];
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(body));
+      });
+    });
+    const image = await startTestImageServer();
+    const { fastify, services } = await createTestServer({
+      scrapeAggregation: createTestAggregation(`${image.url}/cover.png`),
+    });
+    const token = await loginAsAdmin(fastify);
+    await createTestLibrary(fastify, token, root);
+    const qbittorrentStatus = async () =>
+      (
+        await fastify.inject({
+          method: "GET",
+          url: "/trpc/integrations.status",
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).json().result.data.qbittorrent;
+    const polls = () => requests.filter((pathname) => pathname === "/api/v2/torrents/info").length;
+
+    await services.config.update({
+      automation: { qbittorrent: { url: qbittorrent.url, username: "admin", password: "secret", category: "jav" } },
+    });
+    await expect.poll(qbittorrentStatus).toMatchObject({
+      configured: true,
+      error: null,
+      library: { name: "Library" },
+      failures: [{ name: "Elsewhere", error: expect.stringContaining("No library's source directory contains") }],
+    });
+    await expect
+      .poll(async () => (await services.activity.list()).entries.map(({ kind, status }) => ({ kind, status })))
+      .toEqual([{ kind: "scrape", status: "completed" }]);
+    const pollsBefore = polls();
+    // Any settings change polls at once; a handled torrent is not taken again.
+    await services.config.update({ automation: { qbittorrent: { category: "jav" } } });
+    await expect.poll(polls).toBeGreaterThan(pollsBefore);
+    await expect.poll(qbittorrentStatus).toMatchObject({ error: null, failures: [{ name: "Elsewhere" }] });
+
+    expect((await services.activity.list()).entries).toHaveLength(1);
+    expect(requests.filter((pathname) => pathname === "/api/v2/auth/login")).toHaveLength(1);
+    expect((await services.library.list()).entries.map((entry) => entry.number)).toEqual(["ABC-123"]);
+    // The library moves files, but the torrent's file stays in the save path and is hardlinked into the output.
+    const placed = (await readdir(join(root, "JAV_output"), { recursive: true })).filter((name) =>
+      name.endsWith(".mp4"),
+    );
+    expect(placed).toHaveLength(1);
+    expect((await stat(join(root, "JAV_output", placed[0] ?? ""))).ino).toBe(
+      (await stat(join(root, "ABC-123.mp4"))).ino,
+    );
   });
 
   it("delivers outbound automation webhooks when task updates are published", async () => {
     const webhook = await startWebhookServer();
     const root = await createTempRoot("outbound-webhook-root");
-    await writeFile(join(root, "auto-webhook.mp4"), "video");
+    await writeFile(join(root, "ABC-123.mp4"), "video");
+    const image = await startTestImageServer();
     const { fastify } = await createTestServer({
-      automationWebhook: {
-        secret: "test-secret",
-        url: webhook.url,
-      },
+      automationWebhook: { secret: "test-secret", url: webhook.url },
+      scrapeAggregation: createTestAggregation(`${image.url}/cover.png`),
     });
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    await createTestLibrary(fastify, token, root);
 
     const startResponse = await fastify.inject({
       method: "POST",
       url: "/api/automation/scrape/start",
       headers: { authorization: `Bearer ${token}` },
-      payload: { rootId },
+      payload: { path: root },
     });
     const taskId = startResponse.json().task.id;
+    await waitForScrapeRunStatus(fastify, token, taskId, "completed");
 
-    await waitForScanTaskStatus(fastify, token, taskId, "completed");
-
-    await expect
-      .poll(() =>
-        webhook.deliveries.some((delivery) =>
-          isWebhookTaskBody(delivery.body, { taskId, kind: "scan", status: "completed" }),
-        ),
-      )
-      .toBe(true);
     await expect
       .poll(async () => {
         const response = await fastify.inject({
@@ -890,33 +962,25 @@ describe("buildServer composition integration", () => {
       headers: { authorization: `Bearer ${token}` },
     });
 
-    expect(webhook.deliveries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          body: expect.objectContaining({ taskId, kind: "scan", status: "running" }),
-          secret: "test-secret",
-        }),
-        expect.objectContaining({
-          body: expect.objectContaining({ taskId, kind: "scan", status: "completed" }),
-          secret: "test-secret",
-        }),
-      ]),
-    );
-    expect(statusResponse.statusCode).toBe(200);
-    expect(statusResponse.json().webhook).toMatchObject({
-      configured: true,
-      failed: 0,
-    });
-    expect(statusResponse.json().webhook.delivered).toBe(2);
+    expect(webhook.deliveries).toEqual([
+      expect.objectContaining({
+        body: expect.objectContaining({ taskId, kind: "scrape", status: "running" }),
+        secret: "test-secret",
+      }),
+      expect.objectContaining({
+        body: expect.objectContaining({ taskId, kind: "scrape", status: "completed" }),
+        secret: "test-secret",
+      }),
+    ]);
+    expect(statusResponse.json().webhook).toMatchObject({ configured: true, delivered: 2, failed: 0 });
 
     await webhook.close();
   });
-
   it("resolves configured filename NFO paths and preserves unmanaged XML on edit", async () => {
     const root = await createTempRoot("nfo-editor-root");
     const { fastify, services } = await createTestServer();
     const token = await loginAsAdmin(fastify);
-    const rootId = await syncMediaRootFromConfig(fastify, token, root);
+    const { rootId } = await createTestLibrary(fastify, token, root);
     await services.config.update({ download: { nfoNaming: "filename", nfoIgnoreFields: ["director"] } });
     await writeFile(join(root, "ABC-123.mp4"), "video");
     await writeFile(

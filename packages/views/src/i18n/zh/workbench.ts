@@ -8,6 +8,8 @@ export const workbench: Messages["workbench"] = {
 
   // Frame actions
   analyzingFiles: "正在分析文件...",
+  runSummary: (succeeded: number, failed: number, skipped: number, duration: string | null) =>
+    [`成功 ${succeeded}`, `失败 ${failed}`, `跳过 ${skipped}`, duration ?? ""].filter(Boolean).join(" · "),
   resumeScrape: "恢复刮削任务",
   pauseScrape: "暂停刮削任务",
   resume: "恢复",
@@ -42,11 +44,15 @@ export const workbench: Messages["workbench"] = {
   includeSubdirs: "包含子目录",
   scanDirPlaceholder: "请选择需要扫描的媒体目录",
   loadingConfig: "正在读取配置...",
-  outputDirLabel: "输出目录",
-  outputDirPlaceholder: "请选择输出目录",
+  libraryLabel: "媒体库",
+  libraryPlaceholder: "请选择媒体库",
+  manageLibraries: "管理媒体库",
+  noLibraries: "请先创建媒体库以配置文件输出目录与归档规则。",
+  createLibrary: "创建媒体库",
   inaccessiblePathsWarning: (count: number) => `部分路径无法访问，已跳过 ${count} 项`,
   selectVisibleFilesAriaLabel: "选择当前可见文件",
   refreshFiles: "刷新文件",
+  alreadyInLibrary: "已在库中",
   selectedOfTotalFiles: (selected: number, total: number) => `已选 ${selected} / ${total} 个文件`,
   searchFilesAriaLabel: "搜索文件",
   searchFilesPlaceholder: "搜索文件...",
@@ -67,10 +73,7 @@ export const workbench: Messages["workbench"] = {
   // Setup adapter
   cancelScanFailed: (error: string) => `取消扫描失败: ${error}`,
   selectScanDirFailed: (error: string) => `选择扫描目录失败: ${error}`,
-  selectOutputDirFailed: (error: string) => `选择目标目录失败: ${error}`,
   enterFullPath: "请输入完整路径",
 
   // Ports
-  selectFilesToScrape: "请选择要刮削的文件",
-  multiUrlSameDirOnly: "多文件按 URL 刮削仅支持同一媒体根目录下的同一目录",
 };

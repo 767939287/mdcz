@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { basename, dirname, extname } from "node:path";
+import { basename, dirname, extname, resolve } from "node:path";
 import type { ServiceContainer } from "@main/container";
 import { localFileUrlForHostPath } from "@main/localFileProtocol";
 import { configManager } from "@main/services/config/ConfigManager";
 import { createDesktopMediaRootService } from "@main/services/mediaRoots";
 import { DEFAULT_VIDEO_EXTENSIONS, listVideoFiles, pathExists } from "@main/utils/file";
-import { resolveRootFile } from "@mdcz/media-store";
+import { filesystemPathKey, resolveRootFile } from "@mdcz/media-store";
 import { parseNfoSnapshot } from "@mdcz/runtime/maintenance";
 import {
   createMediaWalkFilters,
@@ -89,12 +89,11 @@ export const createFileHandlers = (
             }
 
             const configuration = await configManager.getValidated();
-            const metadataPath = configuration.behavior.metadataOnly ? configuration.paths.metadataPath.trim() : "";
-            if (metadataPath) excludeDirPaths.push(metadataPath);
             const admitted = await mediaRoots.admitDirectory({ hostPath: dirPath });
             const registeredRoots = await mediaRoots.listRoots();
 
-            const candidates: MediaCandidate[] = [];
+            const { library } = await publication();
+            const candidates: Omit<MediaCandidate, "inLibrary">[] = [];
             const warnings = { count: 0, paths: [] as string[] };
             await listVideoFiles(
               admitted.hostPath,
@@ -120,7 +119,17 @@ export const createFileHandlers = (
             );
 
             candidates.sort((a, b) => a.ref.relativePath.localeCompare(b.ref.relativePath, "zh-CN"));
-            return { candidates, warnings, supportedExtensions: [...SUPPORTED_MEDIA_EXTENSIONS] };
+            const inLibrary = library.knownMediaIdentities(
+              candidates.map((candidate) => filesystemPathKey(resolve(candidate.path))),
+            );
+            return {
+              candidates: candidates.map((candidate) => ({
+                ...candidate,
+                inLibrary: inLibrary.has(filesystemPathKey(resolve(candidate.path))),
+              })),
+              warnings,
+              supportedExtensions: [...SUPPORTED_MEDIA_EXTENSIONS],
+            };
           } catch (error) {
             throw asSerializableIpcError(error);
           }

@@ -1,14 +1,50 @@
 import type { ManualScrapeUrlInvalidReason } from "@mdcz/shared/manualScrapeUrl";
 import type { PosterTagBadgePosition, PosterTagBadgeType } from "@mdcz/shared/posterBadges";
+import type { FailureReason } from "@mdcz/shared/siteResults";
 import type { MaintenanceDiffField, MaintenancePresetId } from "@mdcz/shared/types";
 
 export const domain = {
+  failureReasons: {
+    region_blocked: "region-blocked on this network",
+    login_wall: "requires login or verification",
+    cloudflare: "blocked by a Cloudflare challenge",
+    rate_limited: "rate limited",
+    ip_banned: "this network's IP is banned",
+    timeout: "request timed out",
+    empty_shell: "returned an empty page",
+    not_found: "not found",
+    ambiguous: "lists several works under this number",
+    parse_error: "page could not be parsed",
+    http_error: "HTTP error",
+    network_error: "connection failed",
+    unknown: "unknown error",
+  } as Record<FailureReason, string>,
+  siteHealth: {
+    title: "Sites unavailable on this network",
+    unavailable: (site: string, reason: string) => `${site}: ${reason}.`,
+    paused: (site: string, reason: string, until: string) => `${site}: ${reason}; paused until ${until}.`,
+    remedies: {
+      region_blocked: "Turn on a proxy (e.g. Japanese exit) for this site, or disable it in settings.",
+      login_wall: "Add or refresh this site's cookie in the network settings.",
+      cloudflare: "Reach this site through a proxy or a mirror.",
+      ip_banned: "Wait for the ban to lift, switch to another proxy exit, or disable this site.",
+    } as Partial<Record<FailureReason, string>>,
+    recheck: "Restores automatically once connectivity checks pass, network settings update, or the app restarts.",
+    openSettings: "Site settings",
+    useProxy: "Proxy",
+    proxyOff: "Turn on the proxy in the network settings first",
+  },
   maintenancePresets: {
     import_local: {
       label: "Import locally",
       description: "Read existing NFO files and images into the library without changing any files",
     },
     refresh_metadata: { label: "Refresh in place", description: "Refresh metadata online and compare NFO differences" },
+    remerge: {
+      label: "Re-merge",
+      description:
+        "Rebuild metadata from stored site results with the current priorities, without making new network requests",
+    },
     local_organize: { label: "Organize locally", description: "Reorganize the file and folder structure by the rules" },
     rebuild_all: {
       label: "Full rebuild",

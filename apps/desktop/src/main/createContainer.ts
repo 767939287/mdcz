@@ -21,8 +21,10 @@ import {
   LocalActorSource,
   OfficialActorSource,
 } from "@mdcz/runtime/actorSource";
+import { siteNetworkKey } from "@mdcz/runtime/config";
 import { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import { CrawlerProvider, FetchGateway } from "@mdcz/runtime/crawler";
+import { MediaLibraryService, PendingService } from "@mdcz/runtime/library";
 import {
   EmbyActorInfoService,
   EmbyActorPhotoService,
@@ -49,11 +51,8 @@ export const createContainer = ({
   const fetchGateway = new FetchGateway(networkClient);
   const crawlerProvider = new CrawlerProvider({
     fetchGateway,
-    siteCooldownStore: new PersistentCooldownStore({
-      filePath: resolveDesktopDataFile("crawler-site-cooldowns.json"),
-      logger: loggerService.getLogger("CrawlerSiteCooldownStore"),
-    }),
     siteRequestConfigRegistrar: networkClient,
+    getSiteNetworkKey: (site) => siteNetworkKey(configManager.getComputed(), site),
   });
   const imageHostCooldownStore = new PersistentCooldownStore({
     filePath: resolveDesktopDataFile("image-host-cooldowns.json"),
@@ -61,20 +60,15 @@ export const createContainer = ({
   });
   const persistenceService = new DesktopPersistenceService();
   const mediaRoots = createDesktopMediaRootService(persistenceService);
-  const reportUnavailableMediaPath = (hostPath: string, error: unknown) => {
-    configManager.reportDiagnostic(
-      "read-error",
-      new Error(`Configured media root unavailable: ${hostPath}: ${String(error)}`),
-    );
-  };
-  configManager.setBeforeActiveConfigurationCommit(async (next, { source }) => {
-    await mediaRoots.assertConfiguredMediaPath(next, source === "load" ? reportUnavailableMediaPath : undefined);
-  });
-  configManager.setAfterActiveConfigurationCommit(async (next, { source }) => {
-    await mediaRoots.registerConfiguredMediaPath(next, source === "load" ? reportUnavailableMediaPath : undefined);
-  });
+  const libraries = new MediaLibraryService(
+    async () => (await persistenceService.getState()).repositories.mediaLibraries,
+    mediaRoots,
+    async () => await configManager.getValidated(),
+  );
   const outputLibraryScanner = new OutputLibraryScanner({ persistenceService });
-  const desktopLibraryService = new DesktopLibraryService(persistenceService);
+  const desktopLibraryService = new DesktopLibraryService(persistenceService, libraries, () =>
+    configManager.getValidated(),
+  );
   const amazonJpImageService = new AmazonJpImageService(networkClient, loggerService.getLogger("AmazonJpImageService"));
   const actorImageService = new ActorImageService({
     cacheRoot: getActorImageCacheDirectory(),
@@ -87,7 +81,11 @@ export const createContainer = ({
   const actorSourceProvider = new ActorSourceProvider({
     logger: loggerService.getLogger("ActorSource"),
     registry: new ActorSourceRegistry([
-      new LocalActorSource({ actorImageService }),
+      new LocalActorSource({
+        actorImageService,
+        listLibraryDirectories: async () =>
+          (await libraries.list()).flatMap((library) => [library.sourcePath, library.outputPath].filter(Boolean)),
+      }),
       new OfficialActorSource({ networkClient }),
       new GfriendsActorSource({ networkClient }),
       new AvjohoActorSource({ networkClient, cookieResolver: avjohoCookieResolver }),
@@ -102,6 +100,7 @@ export const createContainer = ({
     actorImageService,
     actorSourceProvider,
     imageHostCooldownStore,
+    libraries,
     outputLibraryScanner,
     persistenceService,
     mediaRoots,
@@ -116,6 +115,16 @@ export const createContainer = ({
     actorSourceProvider,
     imageHostCooldownStore,
     mediaRoots,
+    prepareScrapeItem,
+  });
+  const pendingService = new PendingService({
+    repositories: async () => (await persistenceService.getState()).repositories,
+    mediaRoots,
+    startScrape: async (input) => ({ taskId: (await scraperService.start(input)).taskId }),
+    getConfiguration: async () => await configManager.getValidated(),
+    updateConfiguration: async (patch) => await configManager.save(patch),
+    maintenanceRuntime: maintenanceService.maintenanceRuntime,
+    onChanged: () => signalService.invalidate("pending", "overview"),
   });
 
   return {
@@ -127,6 +136,8 @@ export const createContainer = ({
     desktopLibraryService,
     persistenceService,
     mediaRoots,
+    libraries,
+    pendingService,
     scraperService,
     maintenanceService,
     crawlerProvider,
@@ -186,7 +197,6 @@ export const createContainer = ({
       for (const shutdown of [
         async () => await scraperService.shutdown(),
         async () => await maintenanceService.shutdown(),
-        async () => await crawlerProvider.shutdown(),
       ]) {
         try {
           await shutdown();

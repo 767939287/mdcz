@@ -1,3 +1,4 @@
+import { toUniqueActorNames } from "@mdcz/shared/actorAliases";
 import type { Configuration } from "@mdcz/shared/config";
 import type { TranslateEngine } from "@mdcz/shared/enums";
 import type { CrawlerData } from "@mdcz/shared/types";
@@ -18,6 +19,9 @@ import { GenreTranslator } from "./translate/GenreTranslator";
 import { ensureTargetChinese, normalizeNewlines } from "./translate/shared";
 import { type LanguageTarget, type MachineTranslator, type TranslationMappingStore, toTarget } from "./translate/types";
 import { isAbortError, throwIfAborted } from "./utils/abort";
+
+/** Fields whose published translation is already decided; a present key with no value publishes the source text. */
+export type SettledTranslations = Partial<Record<"title" | "plot", string | undefined>>;
 
 export interface TranslateServiceOptions {
   logger?: RuntimeLogger;
@@ -67,9 +71,11 @@ export class TranslateService {
     data: CrawlerData,
     config: Configuration,
     signal?: AbortSignal,
+    settled: SettledTranslations = {},
+    kept: ReadonlySet<keyof CrawlerData> = new Set(),
   ): Promise<{ data: CrawlerData; error: string | null }> {
     if (!config.translate.enableTranslation) {
-      return { data, error: null };
+      return { data: { ...data, title_zh: settled.title, plot_zh: settled.plot }, error: null };
     }
 
     throwIfAborted(signal);
@@ -80,24 +86,28 @@ export class TranslateService {
       `[translation] number=${data.number} engine=${config.translate.engine} target=${target} model=${config.translate.engine === "openai" ? config.translate.llmModelName : "none"} reasoning=${config.translate.engine === "openai" ? config.translate.llmReasoning : "none"} titleChars=${data.title.length} plotChars=${data.plot?.length ?? 0} genres=${data.genres?.length ?? 0}`,
     );
 
-    const mappedActors = await Promise.all(
-      (data.actors ?? []).map((actor) => this.actorNameNormalizer.normalizeAlias(actor)),
-    );
-    const mappedActorProfiles = await Promise.all(
-      (data.actor_profiles ?? []).map((profile) => this.actorNameNormalizer.normalizeProfile(profile)),
-    );
+    const keepActors = kept.has("actors");
+    const mappedActors = keepActors
+      ? (data.actors ?? [])
+      : await Promise.all((data.actors ?? []).map((actor) => this.actorNameNormalizer.normalizeAlias(actor)));
+    const mappedActorProfiles = keepActors
+      ? []
+      : await Promise.all(
+          (data.actor_profiles ?? []).map((profile) => this.actorNameNormalizer.normalizeProfile(profile)),
+        );
     const selectedFields = new Set(config.translate.fields);
     const prepareField = (
       field: "title" | "plot",
       input: string | undefined,
     ): { source: string | null; translated: string | undefined } => {
+      if (field in settled) return { source: null, translated: settled[field] };
       const text = normalizeNewlines(input ?? "").trim();
       if (!text || !selectedFields.has(field)) return { source: null, translated: undefined };
       if (detectLanguage(text) === "zh") return { source: null, translated: ensureTargetChinese(text, target) };
       return { source: text, translated: undefined };
     };
     const fields = { title: prepareField("title", data.title), plot: prepareField("plot", data.plot) };
-    const translateGenres = selectedFields.has("genres");
+    const translateGenres = selectedFields.has("genres") && !kept.has("genres");
     const genres = await this.genreTranslator.resolve(translateGenres ? (data.genres ?? []) : [], target, signal);
     let metadataTranslation: Awaited<ReturnType<TranslateService["translateMetadata"]>> | null = null;
     let translationError: string | null = null;
@@ -148,7 +158,7 @@ export class TranslateService {
         ...data,
         title_zh,
         plot_zh,
-        actors: mappedActors,
+        actors: keepActors ? mappedActors : toUniqueActorNames(mappedActors),
         actor_profiles: mappedActorProfiles.length > 0 ? mappedActorProfiles : data.actor_profiles,
         genres: mappedGenres,
       },

@@ -6,6 +6,8 @@ export const shell: Messages["shell"] = {
     workbench: "工作台",
     tools: "工具",
     library: "媒体库",
+    libraries: "库配置",
+    pending: "待处理",
     settings: "设置",
     logs: "日志",
     about: "关于",
@@ -15,5 +17,7 @@ export const shell: Messages["shell"] = {
   themeSystem: "跟随系统",
   expandSidebar: "展开侧栏",
   collapseSidebar: "收起侧栏",
+  openMenu: "打开导航",
+  closeMenu: "关闭导航",
   switchLanguage: "Switch to English",
 };

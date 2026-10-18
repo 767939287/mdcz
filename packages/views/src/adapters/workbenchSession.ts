@@ -1,7 +1,9 @@
-import type { AmbiguousUncensoredItemDto } from "@mdcz/shared/serverDtos";
-import type { MaintenancePresetId, MediaCandidate, UncensoredChoice } from "@mdcz/shared/types";
+import type { RootFileRef } from "@mdcz/shared/mediaRef";
+import type { LibraryEntryDto, LibraryHealthIssue } from "@mdcz/shared/serverDtos";
+import type { MaintenancePresetId } from "@mdcz/shared/types";
 import {
   changeMaintenancePreset,
+  resetMaintenanceSession,
   selectMaintenanceHasWork,
   useMaintenanceStore,
 } from "@mdcz/views/state/maintenanceStore";
@@ -12,9 +14,11 @@ import {
   useScrapeStore,
 } from "@mdcz/views/state/scrapeStore";
 import { useUIStore } from "@mdcz/views/state/uiStore";
+import { useWorkbenchSetupStore } from "@mdcz/views/state/workbenchSetupStore";
 import { useWorkbenchTaskStore } from "@mdcz/views/state/workbenchTaskStore";
 import { useEffect, useRef } from "react";
 import { getT } from "../i18n";
+import { HEALTH_FIX_PRESETS } from "../library/healthIssues";
 import type { MaintenanceActionPort } from "./ports";
 
 export type WorkbenchMode = "scrape" | "maintenance";
@@ -115,32 +119,51 @@ export const activateNewScrapeTask = (): void => {
   useUIStore.getState().setSelectedResultId(null);
 };
 
-export interface UncensoredConfirmationSelection {
-  id: string;
-  choice: UncensoredChoice;
-}
-
-export const buildUncensoredConfirmationItems = (
-  ambiguousItems: AmbiguousUncensoredItemDto[],
-  selections: UncensoredConfirmationSelection[],
-): Array<{ fileId: string; choice: UncensoredChoice }> => {
-  const choicesById = new Map(selections.map((selection) => [selection.id, selection.choice]));
-  return ambiguousItems.map((item) => ({
-    fileId: item.fileId,
-    choice: choicesById.get(item.id) ?? "uncensored",
-  }));
-};
-
 export const resetScrapeWorkbenchToSetup = (): void => {
   useUIStore.getState().setSelectedResultId(null);
   useWorkbenchTaskStore.getState().reset();
   useScrapeStore.getState().reset();
 };
 
-export interface StartMaintenanceFlowOptions {
-  candidates: MediaCandidate[];
+/**
+ * Starting a task from Overview is a deliberate new start: a finished or stopped result makes way for the setup,
+ * while running work and a preview still waiting for review stay open.
+ */
+export const openNewWorkbenchTask = async (
+  mode: WorkbenchMode,
+  discardMaintenanceSession: () => Promise<void>,
+): Promise<void> => {
+  if (selectIsScraping(useScrapeStore.getState())) return;
+  const { snapshot, pending } = useMaintenanceStore.getState();
+  const finished =
+    snapshot !== null &&
+    (["failed", "stopped", "interrupted"].includes(snapshot.status) ||
+      (snapshot.status === "completed" && snapshot.phase === "apply"));
+  if (pending || (snapshot && !finished)) return;
+  if (snapshot) {
+    await discardMaintenanceSession();
+    resetMaintenanceSession();
+  }
+  if (useScrapeStore.getState().snapshot) resetScrapeWorkbenchToSetup();
+  useUIStore.getState().setWorkbenchMode(mode);
+};
+
+/** Points the workbench setup at a directory and preset; the setup then scans the directory by itself. */
+export const prepareMaintenanceSetup = (input: {
+  scanDir: string;
+  libraryId: string;
   presetId: MaintenancePresetId;
-  targetDir?: string;
+}): void => {
+  useWorkbenchSetupStore.getState().setScanDir(input.scanDir);
+  useWorkbenchSetupStore.getState().setLibraryId(input.libraryId);
+  changeMaintenancePreset(input.presetId);
+  useUIStore.getState().setWorkbenchMode("maintenance");
+};
+
+export interface StartMaintenanceFlowOptions {
+  refs: RootFileRef[];
+  presetId: MaintenancePresetId;
+  libraryId?: string;
   port: MaintenanceActionPort;
   isScraping: boolean;
   setWorkbenchMode?: (mode: WorkbenchMode) => void;
@@ -168,7 +191,7 @@ export const startMaintenanceFlow = async (options: StartMaintenanceFlowOptions)
     changeMaintenancePreset(options.presetId);
     executionStore.setPending(true);
 
-    const refs = options.candidates.map((candidate) => candidate.ref);
+    const { refs } = options;
     if (refs.length === 0) {
       executionStore.setPending(false);
       options.toast.info(t.maintenance.noMaintainableItems);
@@ -176,11 +199,11 @@ export const startMaintenanceFlow = async (options: StartMaintenanceFlowOptions)
       return;
     }
 
-    await options.port.preview(refs, options.presetId, options.targetDir);
+    await options.port.preview(refs, options.presetId, options.libraryId);
     await options.onRefreshConfig?.();
     options.toast.success(
       options.presetId === "import_local"
-        ? t.maintenance.localImportStarted(options.candidates.length)
+        ? t.maintenance.localImportStarted(refs.length)
         : t.maintenance.previewStarted,
     );
   } catch (error) {
@@ -192,4 +215,34 @@ export const startMaintenanceFlow = async (options: StartMaintenanceFlowOptions)
     executionStore.setError(options.toErrorMessage(error));
     options.toast.error(t.maintenance.startFailed(options.toErrorMessage(error)));
   }
+};
+
+/** Previews a site refresh of the movies that have `issue`; the user reviews and applies it in the workbench. */
+export const startHealthFix = async (options: {
+  issue: LibraryHealthIssue;
+  libraryId?: string;
+  entries: LibraryEntryDto[];
+  port: MaintenanceActionPort;
+  isScraping: boolean;
+  toast: StartMaintenanceFlowOptions["toast"];
+  toErrorMessage(error: unknown): string;
+}): Promise<void> => {
+  const t = getT();
+  const presetId = HEALTH_FIX_PRESETS[options.issue];
+  if (!presetId) throw new Error(`No repair for ${options.issue}`);
+  const refs = options.entries.flatMap((entry) =>
+    entry.fileRefs.map((file) => ({ rootId: file.rootId, relativePath: file.relativePath })),
+  );
+  // A maintenance session works inside one media root.
+  if (new Set(refs.map((ref) => ref.rootId)).size > 1) throw new Error(t.library.health.mixedRoots);
+  await startMaintenanceFlow({
+    refs,
+    presetId,
+    libraryId: options.libraryId,
+    port: options.port,
+    isScraping: options.isScraping,
+    setWorkbenchMode: useUIStore.getState().setWorkbenchMode,
+    toast: options.toast,
+    toErrorMessage: options.toErrorMessage,
+  });
 };

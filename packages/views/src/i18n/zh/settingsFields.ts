@@ -3,24 +3,20 @@ import type { Messages } from "../en";
 
 export const settingsFields: Messages["settingsFields"] = {
   sections: {
-    paths: { label: "媒体库与输出", aliases: ["媒体库", "整理", "输出", "移动", "重命名", "元数据", "归档"] },
+    paths: { label: "路径", aliases: ["路径", "目录", "排除", "演员头像"] },
     scrape: { label: "刮削设置" },
     network: { label: "网络连接" },
     translate: { label: "翻译服务" },
     naming: { label: "命名规则" },
     download: { label: "下载选项" },
     mediaServer: { label: "媒体服务器", aliases: ["媒体服务器", "Jellyfin", "Emby", "人物", "演员"] },
+    automation: {
+      label: "集成",
+      aliases: ["集成", "自动化", "下载器", "qBittorrent", "CloudDrive", "API Key", "通知", "推送"],
+    },
     system: { label: "界面与快捷键", aliases: ["系统", "界面", "快捷键"] },
   },
   fields: {
-    "watch.enabled": {
-      label: "自动刮削新增媒体",
-      description: "仅服务端。监控媒体目录；启动时或修改监控设置后已存在的文件作为基线，需要手动刮削。",
-    },
-    "watch.intervalMinutes": {
-      label: "扫描间隔（分钟）",
-      description: "新增文件的大小和修改时间连续两轮不变后才会提交刮削。",
-    },
     "translate.deeplApiKey": {
       label: "DeepL API Key",
       description: "以 :fx 结尾的 Free Key 使用 Free 接口，其余使用 Pro 接口。",
@@ -32,35 +28,10 @@ export const settingsFields: Messages["settingsFields"] = {
     "translate.baiduAppId": { label: "百度翻译 APPID", description: "在百度翻译开放平台「开发者信息」页面查看。" },
     "translate.baiduSecretKey": { label: "百度翻译密钥", description: "在「开发者信息」页面查看。" },
     "translate.baiduApiKey": { label: "百度翻译 API Key", description: "在管理控制台「API Key 管理」页面创建。" },
-    "paths.mediaPath": { label: "媒体目录", aliases: ["媒体库"] },
     "paths.defaultScanExcludeDirs": {
       label: "排除目录",
       description: "扫描媒体库时自动跳过这些文件夹。",
       aliases: ["排除目录", "扫描排除"],
-    },
-    "behavior.successFileMove": {
-      label: "移动视频与字幕",
-      description: "刮削成功后将视频与字幕移动到指定目录归档；关闭时保留在原目录就地保存。",
-    },
-    "paths.successOutputFolder": {
-      label: "整理目标目录",
-      description: "移动归档后的存放目录，支持绝对路径或相对路径（留空则保存在媒体目录下）。",
-      aliases: ["成功目录"],
-    },
-    "behavior.successFileRename": {
-      label: "重命名视频与字幕",
-      description: "按命名规则重命名视频与字幕文件；关闭时保留原始文件名。",
-    },
-    "behavior.metadataOnly": {
-      label: "仅输出元数据",
-      description:
-        "不移动原视频，仅将海报与 NFO 导出到独立目录作为归档；该目录不含视频，媒体服务器无法直接将其作为媒体库。",
-      aliases: ["只读", "仅输出元数据", "归档", "原视频不动"],
-    },
-    "paths.metadataPath": {
-      label: "元数据输出目录",
-      description: "存放 NFO 与海报的目录。",
-      aliases: ["元数据", "本地目录", "元数据目录"],
     },
     "paths.actorPhotoFolder": {
       label: "本地演员头像库目录",
@@ -96,6 +67,7 @@ export const settingsFields: Messages["settingsFields"] = {
     "network.proxyType": { label: "代理类型" },
     "network.proxy": { label: "代理地址" },
     "network.useProxy": { label: "启用代理" },
+    "network.directSites": { label: "直连站点（绕过代理）" },
     "network.timeout": { label: "超时时间(秒)" },
     "network.retryCount": { label: "重试次数" },
     "network.javdbUrl": {
@@ -262,9 +234,6 @@ export const settingsFields: Messages["settingsFields"] = {
     "download.keepFanart": { label: "保留已有背景图" },
     "download.keepSceneImages": { label: "保留已有剧照" },
     "download.keepTrailer": { label: "保留已有预告片" },
-    "download.keepNfo": { label: "保留已有 NFO" },
-    "naming.folderTemplate": { label: "文件夹模板", aliases: ["命名模板"] },
-    "naming.fileTemplate": { label: "文件名模板", aliases: ["命名模板"] },
     "titleRepair.enabled": {
       label: "标题与简介屏蔽词还原",
       description:
@@ -299,11 +268,6 @@ export const settingsFields: Messages["settingsFields"] = {
     "naming.partStyle": {
       label: "分盘样式",
       description: "分盘的视频在输出时保留原始后缀，或统一改写为 CD / PART / DISC 风格",
-    },
-    "aggregation.behavior.preferLongerPlot": {
-      label: "简介优先取更长内容",
-      description: "多个站点都提供简介时，优先采用信息量更高的版本。",
-      aliases: ["长简介"],
     },
     "aggregation.behavior.maxSceneImages": {
       label: "最多保留剧照数",
@@ -380,6 +344,54 @@ export const settingsFields: Messages["settingsFields"] = {
       label: "同步后刷新人物",
       description: "同步简介或头像后，额外请求 Emby 刷新人物元数据与图片。",
     },
+    "emby.notifyAfterPublish": {
+      label: "入库后增量刷新目录",
+      description: "影片整理入库后，请求 Emby 仅刷新该影片所在目录，无需全局扫描媒体库即可即时显示。",
+    },
+    "jellyfin.notifyAfterPublish": {
+      label: "入库后增量刷新目录",
+      description: "影片整理入库后，请求 Jellyfin 仅刷新该影片所在目录，无需全局扫描媒体库即可即时显示。",
+    },
+    "automation.pathMappings": {
+      label: "下载器路径映射",
+      description: "下载器运行在其他容器或主机时，把它报告的路径换成 MDCz 能访问的路径；按最长前缀匹配。",
+      aliases: ["远程路径", "Docker"],
+    },
+    "automation.qbittorrent.url": {
+      label: "qBittorrent WebUI 地址",
+      description: "例如 http://qbittorrent:8080。留空则停止轮询。",
+      aliases: ["下载器", "种子"],
+    },
+    "automation.qbittorrent.apiKey": {
+      label: "qBittorrent API Key",
+      description: "qBittorrent 5.2 及以上可用，优先于用户名和密码。",
+    },
+    "automation.qbittorrent.username": {
+      label: "qBittorrent 用户名",
+      description: "用于旧版本。若 qBittorrent 对 MDCz 所在地址免认证，可留空。",
+    },
+    "automation.qbittorrent.password": { label: "qBittorrent 密码" },
+    "automation.qbittorrent.category": {
+      label: "分类",
+      description:
+        "MDCz 仅处理该分类中下载完成的种子。分类的保存路径必须位于某个媒体库的来源目录内；若同时使用了 MoviePilot 等工具，请避免监控同一分类或路径以防止文件冲突。",
+    },
+    "notifications.webhookUrl": { label: "Webhook 地址", description: "以 JSON 接收每个任务的开始与结束。" },
+    "notifications.webhookSecret": { label: "Webhook 密钥", description: "通过 x-mdcz-webhook-secret 请求头发送。" },
+    "notifications.channels": {
+      label: "通知渠道",
+      description: "刮削完成时发送通知消息；开启每日摘要后也通过这些渠道发送。",
+    },
+    "notifications.telegramBotToken": { label: "Telegram Bot Token" },
+    "notifications.telegramChatId": { label: "Telegram Chat ID" },
+    "notifications.barkUrl": { label: "Bark 地址", description: "包含设备 Key 的 Bark 推送地址。" },
+    "notifications.ntfyUrl": { label: "ntfy 主题地址", description: "例如 https://ntfy.sh/your-topic。" },
+    "notifications.ntfyToken": { label: "ntfy 访问令牌", description: "公开主题可留空。" },
+    "notifications.dailyDigest": {
+      label: "每日摘要",
+      description: "每日定时汇总前一天新增入库的影片数与待处理文件数。",
+    },
+    "notifications.digestHour": { label: "摘要发送时间（0-23 时）", description: "服务端本地时间。" },
     "shortcuts.startOrStopScrape": { label: "开始/停止刮削", description: "示例: S", aliases: ["快捷键"] },
     "shortcuts.retryScrape": { label: "重新刮削", description: "示例: R" },
     "shortcuts.openFolder": { label: "打开所在目录", description: "示例: F" },

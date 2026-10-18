@@ -1,13 +1,19 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { ActorSourceProvider } from "@mdcz/runtime/actorSource";
+import { resolveSiteProxyUrl, siteNetworkKey } from "@mdcz/runtime/config";
 import { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import { CrawlerProvider, FetchGateway } from "@mdcz/runtime/crawler";
+import { MediaLibraryService, PendingService } from "@mdcz/runtime/library";
 import { NetworkClient } from "@mdcz/runtime/network";
 import { ActorImageService, type PrepareScrapeItem } from "@mdcz/runtime/scrape";
 import { runtimeLoggerService } from "@mdcz/runtime/shared";
 import type { FileTranslationMappingStore } from "@mdcz/runtime/translate";
-import { automationRecentInputSchema, automationScrapeStartInputSchema } from "@mdcz/shared/serverDtos";
+import {
+  automationRecentInputSchema,
+  automationScrapeStartInputSchema,
+  cloudDriveNotifySchema,
+} from "@mdcz/shared/serverDtos";
 import { type CreateFastifyContextOptions, fastifyTRPCPlugin } from "@trpc/server/adapters/fastify";
 import Fastify, { type FastifyInstance } from "fastify";
 import { createServerActorSourceProvider, serverActorImageCacheRoot } from "./actorSourceFactory";
@@ -19,16 +25,18 @@ import { writeTaskEventsStream } from "./http/sse";
 import { defaultWebStaticDir, registerStaticWeb } from "./http/staticWeb";
 import { createServerMaintenanceRuntime } from "./maintenanceRuntimeFactory";
 import { appRouter } from "./routers";
-import type { ServerServiceOptions, ServerServices } from "./services";
-import { AuthService } from "./services/authService";
+import type { ServerServices } from "./services";
+import { ActivityService } from "./services/activityService";
+import { AuthenticationError, AuthService } from "./services/authService";
 import { AutomationService } from "./services/automationService";
 import { BrowserService } from "./services/browserService";
 import { ServerConfigService } from "./services/configService";
-import { FolderWatchService } from "./services/folderWatchService";
 import { LibraryService } from "./services/libraryService";
+import { LibraryWatchService } from "./services/libraryWatchService";
 import { MaintenanceService } from "./services/maintenanceService";
 import { MediaRootService } from "./services/mediaRootService";
 import { ServerPersistenceService } from "./services/persistenceService";
+import { QbittorrentService } from "./services/qbittorrentService";
 import { RuntimeActionService } from "./services/runtimeActionService";
 import { RuntimeLogService } from "./services/runtimeLogService";
 import { ScanQueueService } from "./services/scanQueueService";
@@ -52,7 +60,6 @@ export interface ServerResourceOverrides {
 }
 
 export interface BuildServerOptions {
-  serviceOptions?: ServerServiceOptions;
   services?: Partial<ServerServices>;
   resources?: ServerResourceOverrides;
   webStaticDir?: string | false;
@@ -69,18 +76,13 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
   const taskEvents = options.services?.taskEvents ?? createTaskEventBus();
   const mediaRoots = options.services?.mediaRoots ?? new MediaRootService(persistence);
   const runtimeLogs = options.services?.runtimeLogs ?? new RuntimeLogService(1000, taskEvents);
-  const reportUnavailableMediaPath = (hostPath: string, error: unknown) => {
-    config.reportDiagnostic(
-      "read-error",
-      new Error(`Configured media root unavailable: ${hostPath}: ${String(error)}`),
+  const libraries =
+    options.services?.libraries ??
+    new MediaLibraryService(
+      async () => (await persistence.getState()).repositories.mediaLibraries,
+      mediaRoots,
+      async () => await config.get(),
     );
-  };
-  config.setBeforeActiveConfigurationCommit(async (next, { source }) => {
-    await mediaRoots.assertConfiguredMediaPath(next, source === "load" ? reportUnavailableMediaPath : undefined);
-  });
-  config.setAfterActiveConfigurationCommit(async (next, { source }) => {
-    await mediaRoots.registerConfiguredMediaPath(next, source === "load" ? reportUnavailableMediaPath : undefined);
-  });
   config.onDiagnostic((event) => {
     runtimeLogs
       .getLogger("config")
@@ -91,7 +93,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
   const networkClient =
     options.resources?.networkClient ??
     new NetworkClient({
-      getProxyUrl: () => config.getComputed().proxyUrl,
+      getProxyUrl: (site) => resolveSiteProxyUrl(config.getComputed(), site),
       getTimeoutMs: () => config.getComputed().networkTimeoutMs,
       getRetryCount: () => config.getComputed().networkRetryCount,
     });
@@ -101,6 +103,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     new CrawlerProvider({
       fetchGateway,
       siteRequestConfigRegistrar: networkClient,
+      getSiteNetworkKey: (site) => siteNetworkKey(config.getComputed(), site),
     });
   const imageHostCooldownStore =
     options.resources?.imageHostCooldownStore ??
@@ -116,7 +119,10 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       networkClient,
     });
   const actorSourceProvider =
-    options.resources?.actorSourceProvider ?? createServerActorSourceProvider(networkClient, actorImageService);
+    options.resources?.actorSourceProvider ??
+    createServerActorSourceProvider(networkClient, actorImageService, async () =>
+      (await libraries.list()).flatMap((library) => [library.sourcePath, library.outputPath].filter(Boolean)),
+    );
   const scrape =
     options.services?.scrape ??
     new ScrapeService(persistence, mediaRoots, config, taskEvents, {
@@ -129,42 +135,75 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       aggregationService: options.resources?.aggregationService,
       prepareScrapeItem: options.resources?.prepareScrapeItem,
     });
-  const library = options.services?.library ?? new LibraryService(persistence, mediaRoots);
+  const library =
+    options.services?.library ?? new LibraryService(persistence, mediaRoots, libraries, () => config.get());
+  const maintenanceRuntime = createServerMaintenanceRuntime({
+    config,
+    prepareScrapeItem: options.resources?.prepareScrapeItem,
+    networkClient,
+    crawlerProvider,
+    imageHostCooldownStore,
+    actorImageService,
+    actorSourceProvider,
+    mappingStore,
+    recordSiteResults: async (number, results) =>
+      (await persistence.getState()).repositories.siteResults.record(number, results),
+    loadSiteResults: async (number) => (await persistence.getState()).repositories.siteResults.list(number),
+  });
   const maintenance =
-    options.services?.maintenance ??
-    new MaintenanceService(
-      persistence,
-      mediaRoots,
-      taskEvents,
-      createServerMaintenanceRuntime({
-        config,
-        networkClient,
-        crawlerProvider,
-        imageHostCooldownStore,
-        actorImageService,
-        actorSourceProvider,
-        mappingStore,
-      }),
-    );
+    options.services?.maintenance ?? new MaintenanceService(persistence, mediaRoots, taskEvents, maintenanceRuntime);
   const scans = options.services?.scans ?? new ScanQueueService(persistence, mediaRoots, taskEvents, config);
   const system = options.services?.system ?? new SystemService();
+  const notePending = (count: number) => {
+    automation.notePending(count);
+    taskEvents.invalidate("pending");
+  };
+  const libraryWatch =
+    options.services?.libraryWatch ??
+    new LibraryWatchService({
+      config,
+      libraries,
+      mediaRoots,
+      scrape,
+      maintenance,
+      persistence,
+      logger: runtimeLogs.getLogger("LibraryWatch"),
+      onPending: notePending,
+    });
+  const activity = options.services?.activity ?? new ActivityService({ libraries, scans, scrape, maintenance });
+  const automation: AutomationService =
+    options.services?.automation ??
+    new AutomationService({
+      activity,
+      scrape,
+      config,
+      libraries,
+      libraryWatch,
+      mediaRoots,
+      persistence,
+      taskEvents,
+      logger: runtimeLogs.getLogger("Automation"),
+    });
+  scrape.onPending = (count) => automation.notePending(count);
+  const pending =
+    options.services?.pending ??
+    new PendingService({
+      repositories: async () => (await persistence.getState()).repositories,
+      mediaRoots,
+      startScrape: async (input) => ({ taskId: (await scrape.start(input)).task.id }),
+      getConfiguration: async () => await config.get(),
+      updateConfiguration: async (patch) => await config.update(patch),
+      maintenanceRuntime,
+      onChanged: () => taskEvents.invalidate("pending", "scrape-history"),
+    });
   const services: ServerServices = {
-    automation:
-      options.services?.automation ??
-      new AutomationService(scans, scrape, maintenance, taskEvents, options.serviceOptions?.automationWebhook),
-    auth: options.services?.auth ?? new AuthService(config.runtimePaths),
+    activity,
+    automation,
+    auth: options.services?.auth ?? new AuthService(config.runtimePaths, persistence),
     browser: options.services?.browser ?? new BrowserService(mediaRoots),
     config,
-    folderWatch:
-      options.services?.folderWatch ??
-      new FolderWatchService(
-        config,
-        mediaRoots,
-        scrape,
-        maintenance,
-        persistence,
-        runtimeLogs.getLogger("FolderWatch"),
-      ),
+    libraries,
+    libraryWatch,
     library,
     maintenance,
     mediaRoots,
@@ -172,9 +211,19 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     runtimeLogs,
     runtimeActions:
       options.services?.runtimeActions ?? new RuntimeActionService(config, networkClient, crawlerProvider),
+    pending,
+    qbittorrent:
+      options.services?.qbittorrent ??
+      new QbittorrentService({
+        config,
+        automation,
+        libraries,
+        persistence,
+        logger: runtimeLogs.getLogger("qBittorrent"),
+      }),
     scans,
     scrape,
-    serverPaths: options.services?.serverPaths ?? new ServerPathService(mediaRoots, config),
+    serverPaths: options.services?.serverPaths ?? new ServerPathService(mediaRoots, config, libraries),
     system,
     taskEvents,
     tools:
@@ -188,14 +237,30 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
   const fastify = Fastify({
     logger: false,
   });
+  // Plain HTTP routes (automation callbacks, asset and event streams) throw AuthenticationError; a rejected
+  // credential is 401, not the 500 a bare Error would produce. tRPC formats its own errors.
+  fastify.setErrorHandler((error, _request, reply) => {
+    if (error instanceof AuthenticationError) {
+      return reply.code(401).send({ statusCode: 401, error: "Unauthorized", message: error.message });
+    }
+    reply.send(error);
+  });
   const shutdownController = new AbortController();
 
   fastify.addHook("onReady", async () => {
     await services.persistence.initialize();
     await services.config.load();
+    // Settings that moved into libraries become the first library before the configuration is saved without them.
+    const legacy = services.config.takeLegacyConversion();
+    if (legacy) {
+      await services.libraries.adoptLegacyConfiguration(legacy);
+      await services.config.save(await services.config.get());
+    }
     await services.scans.recoverInterrupted();
     await services.auth.status();
-    await services.folderWatch.start();
+    await services.libraryWatch.start();
+    services.automation.start();
+    services.qbittorrent.start();
   });
 
   fastify.addHook("preClose", async () => {
@@ -206,11 +271,14 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
   fastify.addHook("onClose", async () => {
     if (closed) return;
     closed = true;
-    const results = await Promise.allSettled([services.folderWatch.close()]);
+    services.automation.close();
+    // An in-flight poll submits through library watch, so it ends first.
+    const results = await Promise.allSettled([services.qbittorrent.close()]);
+    results.push(...(await Promise.allSettled([services.libraryWatch.close()])));
     results.push(
       ...(await Promise.allSettled([services.scans.close(), services.scrape.close(), services.maintenance.close()])),
     );
-    results.push(...(await Promise.allSettled([crawlerProvider.shutdown(), imageHostCooldownStore.flush()])));
+    results.push(...(await Promise.allSettled([imageHostCooldownStore.flush()])));
     results.push(...(await Promise.allSettled([services.persistence.close()])));
     const errors = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
     if (errors.length) throw new AggregateError(errors, "Server shutdown failed");
@@ -245,20 +313,31 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
   });
 
   fastify.get("/api/automation/library/recent", async (request) => {
-    services.auth.assertAuthenticated(getBearerToken(request));
+    await services.auth.assertAutomation(getBearerToken(request));
     const input = automationRecentInputSchema.parse(request.query);
     return await services.automation.recent(input);
   });
 
   fastify.get("/api/automation/webhooks/status", async (request) => {
-    services.auth.assertAuthenticated(getBearerToken(request));
-    return services.automation.deliveryStatus();
+    await services.auth.assertAutomation(getBearerToken(request));
+    return await services.automation.deliveryStatus();
   });
 
   fastify.post("/api/automation/scrape/start", async (request) => {
-    services.auth.assertAuthenticated(getBearerToken(request));
-    const input = automationScrapeStartInputSchema.parse(request.body);
+    await services.auth.assertAutomation(getBearerToken(request));
+    // Downloaders pass the path as a query parameter (see the qBittorrent command); scripts may send JSON.
+    const input = automationScrapeStartInputSchema.parse({
+      ...(request.query as object),
+      ...(request.body && typeof request.body === "object" ? request.body : {}),
+    });
     return await services.automation.scrapeStart(input);
+  });
+
+  // CloudDrive2's file system watcher. Answered at once, so scanning a FUSE subtree never stalls CloudDrive.
+  fastify.post("/api/webhooks/clouddrive", async (request, reply) => {
+    await services.auth.assertAutomation(getBearerToken(request));
+    services.libraryWatch.submitCloudDriveChanges(cloudDriveNotifySchema.parse(request.body).data);
+    return reply.code(204).send();
   });
 
   fastify.register(fastifyTRPCPlugin, {
@@ -271,7 +350,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
   });
 
   fastify.get("/events/tasks", async (request, reply) => {
-    services.auth.assertAuthenticated(getBearerToken(request));
+    await services.auth.assertAuthenticated(getBearerToken(request));
     reply.hijack();
     await writeTaskEventsStream(
       services,

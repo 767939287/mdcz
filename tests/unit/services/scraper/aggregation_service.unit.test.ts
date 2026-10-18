@@ -1,10 +1,10 @@
 import { configurationSchema, defaultConfiguration } from "@main/services/config";
 import { CrawlerProvider, FetchGateway } from "@mdcz/runtime/crawler";
-import type { CrawlerInput, CrawlerResponse, FailureReason } from "@mdcz/runtime/crawler/base/types";
+import type { CrawlerInput, CrawlerResponse } from "@mdcz/runtime/crawler/base/types";
 import { getCrawlerExecutionSource, NetworkClient, runWithScrapeItem } from "@mdcz/runtime/network";
-import { activateNetworkFixtureContext } from "@mdcz/runtime/network/networkFixtureContext";
 import { AggregationService } from "@mdcz/runtime/scrape";
 import { Website } from "@mdcz/shared/enums";
+import type { FailureReason } from "@mdcz/shared/siteResults";
 import type { CrawlerData } from "@mdcz/shared/types";
 import { describe, expect, it } from "vitest";
 
@@ -49,13 +49,13 @@ const waitForDelay = async (delayMs: number, signal?: AbortSignal): Promise<void
 class MultiResultCrawlerProvider extends CrawlerProvider {
   private readonly siteResults: Map<Website, CrawlerData>;
   private readonly siteDelaysMs: Partial<Record<Website, number>>;
-  private readonly siteFailures: Map<Website, { error: string; failureReason?: FailureReason }>;
+  private readonly siteFailures: Map<Website, { error: string; reason: FailureReason }>;
   readonly calledSites: Website[] = [];
 
   constructor(
     siteResults: Map<Website, CrawlerData>,
     siteDelaysMs: Partial<Record<Website, number>> = {},
-    siteFailures: Map<Website, { error: string; failureReason?: FailureReason }> = new Map(),
+    siteFailures: Map<Website, { error: string; reason: FailureReason }> = new Map(),
   ) {
     super({ fetchGateway: new FetchGateway(new NetworkClient()) });
     this.siteResults = siteResults;
@@ -74,7 +74,7 @@ class MultiResultCrawlerProvider extends CrawlerProvider {
       return {
         input,
         elapsedMs: 1,
-        result: { success: false, error: failure.error, failureReason: failure.failureReason },
+        result: { success: false, error: failure.error, reason: failure.reason },
       };
     }
 
@@ -83,7 +83,7 @@ class MultiResultCrawlerProvider extends CrawlerProvider {
       return {
         input,
         elapsedMs: 1,
-        result: { success: false, error: `No data for ${input.site}` },
+        result: { success: false, error: `No data for ${input.site}`, reason: "not_found" },
       };
     }
 
@@ -142,7 +142,6 @@ describe("AggregationService", () => {
   };
 
   it("isolates each concurrent crawler in its Website source context", async () => {
-    activateNetworkFixtureContext();
     const provider = new MultiResultCrawlerProvider(
       makeSiteResults(
         [Website.DMM, { thumb_url: "https://dmm.example/thumb.jpg" }],
@@ -191,8 +190,8 @@ describe("AggregationService", () => {
         thumb_url: "https://avwikidb.example/thumb.jpg",
       },
     ]);
-    const siteFailures = new Map<Website, { error: string; failureReason?: FailureReason }>([
-      [Website.DMM, { error: "DMM region blocked", failureReason: "region_blocked" }],
+    const siteFailures = new Map<Website, { error: string; reason: FailureReason }>([
+      [Website.DMM, { error: "DMM region blocked", reason: "region_blocked" }],
     ]);
     const provider = new MultiResultCrawlerProvider(siteResults, {}, siteFailures);
     const config = makeConfig({
@@ -205,9 +204,30 @@ describe("AggregationService", () => {
     expect(result).not.toBeNull();
     expect(result?.data.title).toBe("AVWikiDB Title");
     expect(result?.sources.title).toBe(Website.AVWIKIDB);
-    expect(result?.stats.siteResults.find((siteResult) => siteResult.site === Website.DMM)?.failureReason).toBe(
+    expect(result?.stats.siteResults.find((siteResult) => siteResult.site === Website.DMM)?.reason).toBe(
       "region_blocked",
     );
+  });
+
+  it("tries sites of the other content type only when every admitted site misses", async () => {
+    const config = makeConfig({ network: { ...defaultConfiguration.network, javdbCookie: "_jdb_session=ok" } });
+    const thumb_url = "https://example.com/thumb.jpg";
+
+    // A censored release whose number looks like an uncensored date sequence.
+    const misclassified = new MultiResultCrawlerProvider(makeSiteResults([Website.DMM, { thumb_url }]));
+    const fallback = await new AggregationService(misclassified, { config }).aggregate("100524_001");
+    expect(misclassified.calledSites).toEqual([Website.JAVDB, Website.JAVBUS, Website.DMM]);
+    expect(fallback.sources.title).toBe(Website.DMM);
+
+    const uncensored = new MultiResultCrawlerProvider(makeSiteResults([Website.JAVBUS, { thumb_url }]));
+    const found = await new AggregationService(uncensored, { config }).aggregate("100524_001");
+    expect(uncensored.calledSites).toEqual([Website.JAVDB, Website.JAVBUS]);
+    expect(found.stats.siteResults).toContainEqual({
+      site: Website.DMM,
+      status: "skipped",
+      skipReason: "content_type",
+      elapsedMs: 0,
+    });
   });
 
   it("marks crawler budget overruns as timeout failures", async () => {
@@ -226,9 +246,9 @@ describe("AggregationService", () => {
     const result = await new AggregationService(provider, { config }).aggregate("ABF-075");
 
     const dmmResult = result?.stats.siteResults.find((siteResult) => siteResult.site === Website.DMM);
-    expect(dmmResult?.success).toBe(false);
-    expect(dmmResult?.error).toContain("exceeded crawler budget");
-    expect(dmmResult?.failureReason).toBe("timeout");
+    expect(dmmResult?.status).toBe("failed");
+    expect(dmmResult?.detail).toContain("exceeded crawler budget");
+    expect(dmmResult?.reason).toBe("timeout");
   });
 
   it("uses configured durationSeconds priority instead of completion order", async () => {
@@ -611,6 +631,11 @@ describe("AggregationService", () => {
 
     expect(provider.calledSites).toEqual([Website.DMM]);
     expect(result?.stats.failedCount).toBe(0);
-    expect(result?.stats.rejectedSites).toEqual([{ site: Website.FANTIA, reason: "missing_credential" }]);
+    expect(result?.stats.siteResults).toContainEqual({
+      site: Website.FANTIA,
+      status: "skipped",
+      skipReason: "missing_credential",
+      elapsedMs: 0,
+    });
   });
 });

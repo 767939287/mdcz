@@ -1,7 +1,10 @@
 import type { SiteRequestConfig } from "@mdcz/runtime/network";
 import type { Website } from "@mdcz/shared/enums";
+import type { AmbiguousCandidate } from "@mdcz/shared/pending";
 import type { R18MetadataLanguage } from "@mdcz/shared/r18";
+import type { FailureReason } from "@mdcz/shared/siteResults";
 import type { CrawlerData } from "@mdcz/shared/types";
+import type { ContentType } from "../../scrape/utils/movieClassification";
 import type { FetchGateway } from "../FetchGateway";
 
 export interface CrawlerOptions {
@@ -36,7 +39,10 @@ export interface CrawlerSuccessResult {
 export interface CrawlerErrorResult {
   success: false;
   error: string;
-  failureReason?: FailureReason;
+  reason: FailureReason;
+  httpStatus?: number;
+  retryAfterMs?: number;
+  candidates?: AmbiguousCandidate[];
   cause?: unknown;
 }
 
@@ -46,8 +52,6 @@ export interface SearchPageResolution {
   detailUrl: string;
   reuseSearchDocument?: boolean;
 }
-
-export type FailureReason = "not_found" | "region_blocked" | "login_wall" | "timeout" | "parse_error" | "unknown";
 
 export interface CrawlerResponse {
   input: CrawlerInput;
@@ -67,4 +71,8 @@ export interface AdapterDependencies {
 export interface SiteAdapterConstructor {
   new (dependencies: AdapterDependencies): SiteAdapter;
   readonly siteRequestConfigs?: readonly SiteRequestConfig[];
+  /** Maker sites answer only the numbers this matches. */
+  readonly numberPattern?: RegExp;
+  /** Catalog sites answer numbers of these content types; required when `numberPattern` is absent. */
+  readonly contentTypes?: readonly ContentType[];
 }

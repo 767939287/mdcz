@@ -13,12 +13,18 @@ import {
   type ConfigurationFileFormat,
   inferConfigurationFileFormat,
   parseConfigurationContent,
+  parseConfigurationDocument,
   serializeConfiguration,
 } from "@mdcz/shared/configCodec";
-import type { NamingPreviewItem } from "@mdcz/shared/types";
-import { FileOrganizer } from "../scrape/FileOrganizer";
+import { convertLegacyConfiguration, type LegacyConfigurationConversion } from "./legacyLibrary";
 
-export { buildComputedConfiguration, type ComputedConfiguration } from "./computed";
+export {
+  buildComputedConfiguration,
+  type ComputedConfiguration,
+  resolveSiteProxyUrl,
+  siteNetworkKey,
+} from "./computed";
+export type { LegacyConfigurationConversion } from "./legacyLibrary";
 
 export const RUNTIME_ACTIVE_PROFILE_META_FILE = ".active-profile.json";
 export const RUNTIME_DEFAULT_PROFILE_NAME = "default";
@@ -148,19 +154,6 @@ export const mergeRuntimeConfig = <T>(base: T, patch: DeepPartial<T>): T => {
   return merged as T;
 };
 
-const namingPreviewEngine = new FileOrganizer();
-
-export const buildRuntimeNamingPreview = (
-  configuration: Configuration,
-  patch: DeepPartial<Configuration> = {},
-): { items: NamingPreviewItem[] } => {
-  const config = parseRuntimeConfiguration(mergeRuntimeConfig(configuration, patch));
-
-  return {
-    items: namingPreviewEngine.buildNamingPreview(config),
-  };
-};
-
 export interface RuntimeConfigProfileStoreOptions {
   configDir: string;
   dataDir?: string;
@@ -225,6 +218,7 @@ export interface RuntimeConfigDiagnosticEvent {
 
 export class RuntimeConfigService {
   private configuration: Configuration | null = null;
+  private legacyConversion?: LegacyConfigurationConversion;
   private store: RuntimeConfigProfileStore;
   private readonly changeListeners = new Set<(event: RuntimeConfigChangeEvent) => void>();
   private readonly diagnosticListeners = new Set<(event: RuntimeConfigDiagnosticEvent) => void>();
@@ -253,6 +247,18 @@ export class RuntimeConfigService {
     this.store = store;
   }
 
+  /** Settings that moved into libraries, read from the active profile; returned once. */
+  takeLegacyConversion(): LegacyConfigurationConversion | undefined {
+    const conversion = this.legacyConversion;
+    this.legacyConversion = undefined;
+    return conversion;
+  }
+
+  /** True while the active profile still holds settings that moved into libraries. */
+  get hasLegacyConversion(): boolean {
+    return this.legacyConversion !== undefined;
+  }
+
   onChange(listener: (event: RuntimeConfigChangeEvent) => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
@@ -271,6 +277,7 @@ export class RuntimeConfigService {
     this.configuration = await this.runWithValidation(async () => {
       await this.options.onBeforeLoad?.();
       const loaded = await this.store.load();
+      this.legacyConversion = this.store.takeLegacyConversion() ?? this.legacyConversion;
       await this.options.onBeforeCommit?.(loaded, { source: "load", previous: this.configuration });
       const next = await this.applyAfterLoad(loaded);
       await this.options.onAfterCommit?.(next, { source: "load", previous: this.configuration });
@@ -329,10 +336,6 @@ export class RuntimeConfigService {
     });
   }
 
-  async previewNaming(patch: DeepPartial<Configuration>): Promise<{ items: NamingPreviewItem[] }> {
-    return await this.runWithValidation(async () => buildRuntimeNamingPreview(await this.get(), patch));
-  }
-
   async reset(propertyPath?: string): Promise<Configuration> {
     if (!propertyPath) {
       return await this.saveFull(defaultConfiguration);
@@ -373,6 +376,7 @@ export class RuntimeConfigService {
     const previousConfiguration = this.configuration;
     this.configuration = await this.runWithValidation(async () => {
       const switched = await this.store.switchProfile(name);
+      this.legacyConversion = this.store.takeLegacyConversion() ?? this.legacyConversion;
       try {
         await this.options.onBeforeCommit?.(switched, { source: "switch", previous: previousConfiguration });
         const next = await this.applyAfterLoad(switched);
@@ -497,6 +501,7 @@ export class RuntimeConfigService {
 export class RuntimeConfigProfileStore {
   private activeProfileName: string;
   private activeProfileLoaded = false;
+  private legacyConversion?: LegacyConfigurationConversion;
 
   constructor(private readonly options: RuntimeConfigProfileStoreOptions) {
     this.activeProfileName = options.activeProfileName
@@ -518,7 +523,13 @@ export class RuntimeConfigProfileStore {
   }
 
   async reloadActiveProfile(): Promise<Configuration> {
-    return await this.readConfigurationFile(this.getExistingProfilePath(this.activeProfileName));
+    return await this.readConfigurationFile(this.getExistingProfilePath(this.activeProfileName), true);
+  }
+
+  takeLegacyConversion(): LegacyConfigurationConversion | undefined {
+    const conversion = this.legacyConversion;
+    this.legacyConversion = undefined;
+    return conversion;
   }
 
   async reloadActiveProfileName(): Promise<string> {
@@ -539,7 +550,7 @@ export class RuntimeConfigProfileStore {
       return defaultConfiguration;
     }
 
-    return await this.readConfigurationFile(profilePath);
+    return await this.readConfigurationFile(profilePath, true);
   }
 
   async save(configuration: Configuration): Promise<Configuration> {
@@ -589,7 +600,7 @@ export class RuntimeConfigProfileStore {
     this.activeProfileName = profileName;
     this.activeProfileLoaded = true;
     await this.persistActiveProfileName();
-    return await this.readConfigurationFile(filePath);
+    return await this.readConfigurationFile(filePath, true);
   }
 
   async deleteProfile(name: string): Promise<{ profileName: string }> {
@@ -760,9 +771,12 @@ export class RuntimeConfigProfileStore {
     );
   }
 
-  private async readConfigurationFile(filePath: string): Promise<Configuration> {
-    const content = await readFile(filePath, "utf8");
-    return parseRuntimeConfigurationContent(content, inferConfigurationFileFormat(filePath));
+  private async readConfigurationFile(filePath: string, active = false): Promise<Configuration> {
+    const raw = parseConfigurationDocument(await readFile(filePath, "utf8"), inferConfigurationFileFormat(filePath));
+    const conversion = convertLegacyConfiguration(raw);
+    const configuration = parseRuntimeConfiguration(raw);
+    if (active && conversion) this.legacyConversion = conversion;
+    return configuration;
   }
 
   private async readProfileConfiguration(filePath: string, profileName: string): Promise<Configuration> {

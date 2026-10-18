@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BAIDU_SERVICE_OPTIONS, type Configuration, type DeepPartial } from "./config";
+import { BAIDU_SERVICE_OPTIONS, type Configuration, type DeepPartial, type notificationsSchema } from "./config";
 import { directorySourceSchema, directoryTaskScopeSchema } from "./directoryTasks";
 import { TRANSLATION_TARGET_OPTIONS, TranslateEngine, Website } from "./enums";
 import {
@@ -8,11 +8,18 @@ import {
   LLM_REASONING_OPTIONS,
   LLM_SERVICE_TYPE_OPTIONS,
 } from "./llm";
-import { assetRefSchema, type RootFileRef, rootFileRefSchema, wireRelativeDirectorySchema } from "./mediaRef";
+import { assetRefSchema, type RootFileRef, rootFileRefSchema } from "./mediaRef";
 import { normalizedCropRegionSchema } from "./posterCrop";
+import { FAILURE_REASONS, siteHealthSchema } from "./siteResults";
 import type { MediaCandidate } from "./types";
 
-export const maintenancePresetIdSchema = z.enum(["import_local", "refresh_metadata", "local_organize", "rebuild_all"]);
+export const maintenancePresetIdSchema = z.enum([
+  "import_local",
+  "refresh_metadata",
+  "remerge",
+  "local_organize",
+  "rebuild_all",
+]);
 export type MaintenancePresetIdDto = z.infer<typeof maintenancePresetIdSchema>;
 
 export const mediaRootAvailabilitySchema = z.object({
@@ -226,6 +233,8 @@ export const scrapeRunTaskSchema = z.object({
   revision: z.number().int().nonnegative(),
   continuity: z.enum(["live", "final", "interrupted"]),
   previousTaskId: z.string().nullable(),
+  /** The library the run publishes into; re-scrapes of its items go there too. */
+  libraryId: z.string().nullable(),
 });
 
 export type ScrapeRunTaskDto = z.infer<typeof scrapeRunTaskSchema>;
@@ -269,42 +278,18 @@ export const scrapeFileRefSchema = rootFileRefSchema;
 
 export type ScrapeFileRefDto = RootFileRef;
 
-export const ambiguousUncensoredItemSchema = z.object({
-  id: z.string(),
-  ref: scrapeFileRefSchema,
-  fileId: z.string(),
-  fileName: z.string(),
-  number: z.string(),
-  title: z.string().nullable(),
-  nfoRelativePath: z.string().nullable(),
-});
-
-export type AmbiguousUncensoredItemDto = z.infer<typeof ambiguousUncensoredItemSchema>;
-
-const scrapeBatchStartInputSchema = z.object({
-  executionMode: z.literal("batch"),
-  outputRootId: z.string().trim().min(1),
-  outputRelativeDirectory: wireRelativeDirectorySchema.optional(),
-  refs: z.array(scrapeFileRefSchema).min(1),
-  maintenancePreset: maintenancePresetIdSchema.optional(),
-  uncensoredConfirmed: z.boolean().optional(),
-  manualUrl: z.string().trim().min(1).optional(),
-});
-
-const scrapeSingleStartInputSchema = z.object({
-  executionMode: z.literal("single"),
-  outputRootId: z.string().trim().min(1).optional(),
-  outputRelativeDirectory: wireRelativeDirectorySchema.optional(),
-  refs: z.array(scrapeFileRefSchema).length(1),
-  maintenancePreset: maintenancePresetIdSchema.optional(),
-  uncensoredConfirmed: z.boolean().optional(),
-  manualUrl: z.string().trim().min(1).optional(),
-});
-
 export const scrapeStartInputSchema = z.union([
-  z.object({ executionMode: z.literal("batch"), source: directorySourceSchema, targetDir: z.string().trim().min(1) }),
-  scrapeBatchStartInputSchema,
-  scrapeSingleStartInputSchema,
+  z.object({ executionMode: z.literal("batch"), libraryId: z.string().trim().min(1), source: directorySourceSchema }),
+  z.object({
+    executionMode: z.enum(["batch", "single"]),
+    libraryId: z.string().trim().min(1),
+    refs: z.array(scrapeFileRefSchema).min(1),
+    manualUrl: z.string().trim().min(1).optional(),
+    /** Replaces the number parsed from the file name. */
+    number: z.string().trim().min(1).optional(),
+    /** Search by number even where an NFO pins a detail page, and drop that pin. */
+    unpin: z.boolean().optional(),
+  }),
 ]);
 
 export type ScrapeStartInput = z.output<typeof scrapeStartInputSchema>;
@@ -318,12 +303,6 @@ export type ScrapeTaskControlInput = z.infer<typeof scrapeTaskControlInputSchema
 
 export const scrapeRerunDirectoryInputSchema = z.object({ taskId: z.string().trim().min(1) });
 export type ScrapeRerunDirectoryInput = z.infer<typeof scrapeRerunDirectoryInputSchema>;
-
-export const scrapeConfirmUncensoredInputSchema = z.object({
-  items: z.array(z.object({ fileId: z.string().trim().min(1), choice: z.enum(["umr", "leak", "uncensored"]) })).min(1),
-});
-
-export type ScrapeConfirmUncensoredInput = z.infer<typeof scrapeConfirmUncensoredInputSchema>;
 
 export const scrapeResultIdInputSchema = z.object({
   id: z.string().trim().min(1),
@@ -402,7 +381,6 @@ export const scrapeResultSchema = z.object({
   outputRelativePath: z.string().nullable(),
   assets: z.array(assetRefSchema),
   manualUrl: z.string().nullable(),
-  uncensoredAmbiguous: z.boolean().optional(),
   persistenceState: z.enum(["terminal", "interrupted"]).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -443,7 +421,6 @@ export const scrapeLiveItemSchema = z.object({
   outputRelativePath: z.string().nullable(),
   assets: z.array(assetRefSchema),
   manualUrl: z.string().nullable(),
-  uncensoredAmbiguous: z.boolean(),
 });
 
 export type ScrapeLiveItemDto = z.infer<typeof scrapeLiveItemSchema>;
@@ -464,6 +441,7 @@ export const scrapeHistoryRunSchema = z.object({
   id: z.string(),
   rootId: z.string(),
   rootDisplayName: z.string(),
+  libraryId: z.string().nullable(),
   requestedOutputRootId: z.string().nullable(),
   outputRootId: z.string().nullable(),
   executionMode: z.enum(["single", "batch"]),
@@ -521,19 +499,19 @@ export const fileActionResponseSchema = z.object({
 
 export type FileActionResponse = z.infer<typeof fileActionResponseSchema>;
 
+/** Presets that move files organize them into `libraryId`'s output with its templates. */
 export const maintenanceStartInputSchema = z.union([
   z.object({ rerunSessionId: z.string().min(1) }),
   z.object({
     source: directorySourceSchema,
-    targetDir: z.string().trim().min(1).optional(),
+    libraryId: z.string().trim().min(1).optional(),
     presetId: maintenancePresetIdSchema,
   }),
   z.object({
     rootId: z.string().trim().min(1),
     presetId: maintenancePresetIdSchema,
     refs: z.array(scrapeFileRefSchema).min(1),
-    outputRootId: z.string().trim().min(1).optional(),
-    outputRelativeDirectory: wireRelativeDirectorySchema.optional(),
+    libraryId: z.string().trim().min(1).optional(),
   }),
 ]);
 
@@ -620,7 +598,6 @@ export const scrapeRunSnapshotSchema = z.object({
     })
     .nullable(),
   logs: z.array(logEntrySchema),
-  ambiguousUncensoredItems: z.array(ambiguousUncensoredItemSchema),
 });
 
 export type ScrapeRunSnapshotDto = z.infer<typeof scrapeRunSnapshotSchema>;
@@ -637,24 +614,10 @@ export const scrapeMutationAckSchema = z.object({
 
 export type ScrapeMutationAckDto = z.infer<typeof scrapeMutationAckSchema>;
 
-export const scrapePendingUncensoredConfirmationItemSchema = ambiguousUncensoredItemSchema;
-
-export type ScrapePendingUncensoredConfirmationItemDto = z.infer<typeof scrapePendingUncensoredConfirmationItemSchema>;
-
-export const scrapePendingUncensoredConfirmationResponseSchema = z.object({
-  items: z.array(scrapePendingUncensoredConfirmationItemSchema),
-});
-
-export type ScrapePendingUncensoredConfirmationResponse = z.infer<
-  typeof scrapePendingUncensoredConfirmationResponseSchema
->;
-
 export const taskNotificationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("invalidate"),
-    resources: z.array(
-      z.enum(["ready", "scan", "scrape-live", "scrape-history", "maintenance", "pending-confirmation"]),
-    ),
+    resources: z.array(z.enum(["ready", "scan", "scrape-live", "scrape-history", "maintenance", "pending"])),
   }),
   z.object({ kind: z.literal("log"), log: logEntrySchema }),
 ]);
@@ -690,8 +653,6 @@ export const libraryEntrySchema = z.object({
       partNumber: z.number().int().positive().nullable(),
       partSuffix: z.string().nullable(),
       resolution: z.string().nullable(),
-      runId: z.string().nullable(),
-      scrapeOutcomeId: z.string().nullable(),
       available: z.boolean().nullable(),
       availabilityError: z.string().nullable(),
     }),
@@ -710,16 +671,48 @@ export const libraryEntrySchema = z.object({
 
 export type LibraryEntryDto = z.infer<typeof libraryEntrySchema>;
 
+export const LIBRARY_HEALTH_ISSUES = [
+  "missingPoster",
+  "missingBackdrop",
+  "missingSynopsis",
+  "noNfo",
+  "duplicate",
+] as const;
+export const libraryHealthIssueSchema = z.enum(LIBRARY_HEALTH_ISSUES);
+export type LibraryHealthIssue = z.infer<typeof libraryHealthIssueSchema>;
+
+/** Narrows a listing or a summary to one library, and within it to one issue or one actor, studio or tag. */
+const libraryScopeFields = {
+  libraryId: z.string().trim().min(1).optional(),
+  health: libraryHealthIssueSchema.optional(),
+  actor: z.string().trim().min(1).optional(),
+  studio: z.string().trim().min(1).optional(),
+  tag: z.string().trim().min(1).optional(),
+};
+
 export const libraryListInputSchema = z
   .object({
     cursor: z.string().trim().min(1).max(2048).optional(),
     query: z.string().optional(),
     rootId: z.string().optional(),
     limit: z.number().int().min(1).max(500).optional(),
+    ...libraryScopeFields,
   })
   .optional();
 
 export type LibraryListInput = z.infer<typeof libraryListInputSchema>;
+
+export const librarySummaryInputSchema = z.object({ libraryId: libraryScopeFields.libraryId }).optional();
+export type LibrarySummaryInput = z.infer<typeof librarySummaryInputSchema>;
+
+const libraryFacetSchema = z.array(z.object({ name: z.string(), count: z.number().int() }));
+
+export const librarySummaryResponseSchema = z.object({
+  total: z.number().int(),
+  issues: z.record(libraryHealthIssueSchema, z.number().int()),
+  facets: z.object({ actors: libraryFacetSchema, studios: libraryFacetSchema, tags: libraryFacetSchema }),
+});
+export type LibrarySummaryResponse = z.infer<typeof librarySummaryResponseSchema>;
 
 export const libraryDetailInputSchema = z.object({
   id: z.string().trim().min(1),
@@ -799,8 +792,6 @@ export type OverviewRecentAcquisitionDto = z.infer<typeof overviewRecentAcquisit
 export const overviewOutputSummarySchema = z.object({
   fileCount: z.number(),
   totalBytes: z.number(),
-  outputAt: z.string().nullable(),
-  rootPath: z.string().nullable(),
 });
 
 export type OverviewOutputSummaryDto = z.infer<typeof overviewOutputSummarySchema>;
@@ -849,6 +840,28 @@ export const automationWebhookEventSchema = z.object({
 
 export type AutomationWebhookEventDto = z.infer<typeof automationWebhookEventSchema>;
 
+export const activityEntrySchema = z.object({
+  id: z.string(),
+  kind: z.enum(["scan", "scrape", "maintenance"]),
+  status: taskStatusSchema,
+  target: z.string(),
+  updatedAt: z.string(),
+  startedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  /** Time the server spent working; a maintenance session sums its phases and leaves out the time spent reviewing. */
+  durationMs: z.number().nullable(),
+  /** Item outcomes of a scrape run; other kinds report none. */
+  counts: z.object({ success: z.number(), failed: z.number(), skipped: z.number() }).nullable(),
+  error: z.string().nullable(),
+});
+export type ActivityEntryDto = z.infer<typeof activityEntrySchema>;
+
+export const activityListInputSchema = z.object({ limit: z.number().int().min(1).max(100).optional() }).optional();
+export type ActivityListInput = z.infer<typeof activityListInputSchema>;
+
+export const activityListResponseSchema = z.object({ entries: z.array(activityEntrySchema) });
+export type ActivityListResponse = z.infer<typeof activityListResponseSchema>;
+
 export const automationRecentInputSchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -880,31 +893,87 @@ export const automationWebhookDeliveryStatusResponseSchema = z.object({
 
 export type AutomationWebhookDeliveryStatusResponse = z.infer<typeof automationWebhookDeliveryStatusResponseSchema>;
 
-export const automationScrapeStartInputSchema = z
-  .object({
-    refs: z.array(scrapeFileRefSchema).min(1).optional(),
-    rootId: z.string().trim().min(1).optional(),
-    outputRootId: z.string().trim().min(1).optional(),
-    outputRelativeDirectory: wireRelativeDirectorySchema.optional(),
-    executionMode: z.enum(["single", "batch"]).default("batch"),
-    manualUrl: z.string().trim().min(1).optional(),
-    uncensoredConfirmed: z.boolean().optional(),
-  })
-  .superRefine((value, context) => {
-    if (value.refs?.length && value.executionMode === "batch" && !value.outputRootId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["outputRootId"],
-        message: "Batch scrapes require outputRootId",
-      });
-    }
-  });
+export const apiKeyCreateInputSchema = z.object({ name: z.string().trim().min(1).max(80) });
+export type ApiKeyCreateInput = z.infer<typeof apiKeyCreateInputSchema>;
+
+export const apiKeySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  prefix: z.string(),
+  createdAt: z.string(),
+  lastUsedAt: z.string().nullable(),
+});
+export type ApiKeyDto = z.infer<typeof apiKeySchema>;
+
+export const apiKeyListResponseSchema = z.object({ keys: z.array(apiKeySchema) });
+export type ApiKeyListResponse = z.infer<typeof apiKeyListResponseSchema>;
+
+/** The key itself is shown only here; the server keeps a hash. */
+export const apiKeyCreateResponseSchema = z.object({ key: apiKeySchema, secret: z.string() });
+export type ApiKeyCreateResponse = z.infer<typeof apiKeyCreateResponseSchema>;
+
+/** Liveness of the downloader and cloud drive integrations, so a misconfigured one is visible instead of silent. */
+export const integrationStatusResponseSchema = z.object({
+  /** Times are kept in memory: null means no webhook arrived since the server started. */
+  cloudDrive: z.object({
+    lastEventAt: z.string().nullable(),
+    /** Per library id, the last webhook that touched its cloud path. */
+    libraries: z.record(z.string(), z.string()),
+  }),
+  qbittorrent: z.object({
+    configured: z.boolean(),
+    lastPollAt: z.string().nullable(),
+    error: z.string().nullable(),
+    /** The library whose source holds the category's save path. */
+    library: z.object({ id: z.string(), name: z.string() }).nullable(),
+    failures: z.array(z.object({ name: z.string(), error: z.string() })),
+  }),
+});
+
+export type IntegrationStatusResponse = z.infer<typeof integrationStatusResponseSchema>;
+
+/** CloudDrive2's file_system_watcher payload; unknown fields are ignored and booleans may arrive as strings. */
+export const cloudDriveNotifySchema = z.object({
+  data: z
+    .array(
+      z
+        .object({
+          action: z
+            .string()
+            .transform((value) => value.trim().toLowerCase())
+            .pipe(z.enum(["create", "delete", "rename"])),
+          is_dir: z
+            .union([z.boolean(), z.string()])
+            .transform((value) =>
+              typeof value === "boolean" ? value : ["true", "1", "yes"].includes(value.trim().toLowerCase()),
+            ),
+          source_file: z.string().default(""),
+          destination_file: z.string().nullish(),
+        })
+        .transform((change) => ({
+          action: change.action,
+          isDir: change.is_dir,
+          sourceFile: change.source_file,
+          destinationFile: change.destination_file ?? "",
+        })),
+    )
+    .default([]),
+});
+
+/** A downloader callback: an absolute path as the downloader sees it, a file or a directory. */
+export const automationScrapeStartInputSchema = z.object({
+  path: z.string().trim().min(1),
+  /** Scrape into this library instead of the one whose source directory holds the path. */
+  libraryId: z.string().trim().min(1).optional(),
+});
 
 export type AutomationScrapeStartInput = z.infer<typeof automationScrapeStartInputSchema>;
 
 export const automationScrapeStartResponseSchema = z.object({
-  task: z.union([scanTaskSchema, scrapeRunTaskSchema]),
-  webhook: automationWebhookEventSchema,
+  task: z.union([scanTaskSchema, scrapeRunTaskSchema]).nullable(),
+  webhook: automationWebhookEventSchema.nullable(),
+  /** True when the callback named a file the watcher or library already accepted; nothing was queued. */
+  duplicate: z.boolean(),
 });
 
 export type AutomationScrapeStartResponse = z.infer<typeof automationScrapeStartResponseSchema>;
@@ -920,6 +989,7 @@ export const crawlerSiteInfoSchema = z.object({
   name: z.string(),
   enabled: z.boolean(),
   native: z.boolean(),
+  health: siteHealthSchema.optional(),
 });
 
 export type CrawlerSiteInfoDto = z.infer<typeof crawlerSiteInfoSchema>;
@@ -945,6 +1015,7 @@ export const siteConnectivityProbeResponseSchema = z.object({
   redirectedHost: z.string().optional(),
   /** Raw request error when the probe could not get an HTTP response. */
   error: z.string().optional(),
+  reason: z.enum(FAILURE_REASONS).optional(),
 });
 
 export type SiteConnectivityProbeResponse = z.infer<typeof siteConnectivityProbeResponseSchema>;
@@ -999,6 +1070,8 @@ export const translateTestInputSchema = z.object({
 
 export type TranslateTestInputDto = z.infer<typeof translateTestInputSchema>;
 
+export type NotificationTestInputDto = z.input<typeof notificationsSchema>;
+
 export const translateTestResponseSchema = z.object({
   status: z.enum(["ok", "missing_model", "missing_credentials", "failed"]),
   sample: z.string().optional(),
@@ -1042,10 +1115,6 @@ export const configPathInputSchema = z
   .optional();
 
 export type ConfigPathInput = z.infer<typeof configPathInputSchema>;
-
-export const configPreviewInputSchema = z.record(z.string(), z.any());
-
-export type ConfigPreviewInput = DeepPartial<Configuration>;
 
 export const configUpdateInputSchema = z.record(z.string(), z.any());
 
@@ -1120,9 +1189,11 @@ export type ToolCatalogResponse = z.infer<typeof toolCatalogResponseSchema>;
 export const toolExecuteInputSchema = z.discriminatedUnion("toolId", [
   z.object({
     toolId: z.literal("single-file-scraper"),
+    libraryId: z.string().trim().min(1),
     rootId: z.string().trim().min(1),
     relativePath: z.string().trim().min(1),
     manualUrl: z.string().trim().min(1).optional(),
+    unpin: z.boolean().optional(),
   }),
   z.object({
     toolId: z.literal("crawler-tester"),
@@ -1146,6 +1217,7 @@ export const toolExecuteInputSchema = z.discriminatedUnion("toolId", [
   z.object({
     toolId: z.literal("batch-nfo-translator"),
     action: z.enum(["translate-text", "scan", "apply"]).optional().default("translate-text"),
+    mode: z.enum(["untranslated", "all", "restore"]).optional(),
     text: z.string().trim().min(1).optional(),
     directory: z.string().trim().min(1).optional(),
     batchSize: z.number().int().min(1).max(20).optional(),

@@ -3,7 +3,7 @@ import { AlertCircle, FolderOpen, ImageOff, Library, Loader2, Trash2 } from "luc
 import { type ComponentType, type ReactNode, useState } from "react";
 import { useT } from "../i18n";
 
-const SKELETON_KEYS = ["slot-1", "slot-2", "slot-3", "slot-4", "slot-5", "slot-6", "slot-7", "slot-8"];
+const SKELETON_KEYS = ["slot-1", "slot-2", "slot-3", "slot-4", "slot-5", "slot-6"];
 
 export interface RecentAcquisitionViewItem {
   actors: string[];
@@ -67,7 +67,7 @@ export function RecentAcquisitionsGrid<TItem extends RecentAcquisitionViewItem =
   const t = useT();
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4 lg:gap-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
         {SKELETON_KEYS.map((key) => (
           <div key={key} className="aspect-[2/3] animate-pulse rounded-quiet-lg bg-surface-raised" />
         ))}
@@ -77,7 +77,7 @@ export function RecentAcquisitionsGrid<TItem extends RecentAcquisitionViewItem =
 
   if (isError) {
     return (
-      <div className="flex min-h-[260px] flex-col items-center justify-center rounded-quiet-xl bg-surface-low p-8 text-center">
+      <div className="flex min-h-[220px] flex-col items-center justify-center rounded-quiet-xl bg-surface-low p-6 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
         <h3 className="mt-4 text-base font-semibold">{t.overview.recent.loadFailedTitle}</h3>
         <p className="mt-1 text-sm text-muted-foreground">{t.overview.recent.loadFailedDescription}</p>
@@ -93,7 +93,7 @@ export function RecentAcquisitionsGrid<TItem extends RecentAcquisitionViewItem =
 
   if (items.length === 0) {
     return (
-      <div className="flex min-h-[260px] flex-col items-center justify-center rounded-quiet-xl bg-surface-low p-8 text-center">
+      <div className="flex min-h-[220px] flex-col items-center justify-center rounded-quiet-xl bg-surface-low p-6 text-center">
         <Library className="h-9 w-9 text-muted-foreground" />
         <h3 className="mt-4 text-lg font-semibold">{t.overview.recent.emptyTitle}</h3>
         <p className="mt-1 max-w-md text-sm text-muted-foreground">{t.overview.recent.emptyDescription}</p>
@@ -102,7 +102,7 @@ export function RecentAcquisitionsGrid<TItem extends RecentAcquisitionViewItem =
   }
 
   return (
-    <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4 lg:gap-6">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {items.map((item) => (
         <AcquisitionCard
           getImageSrc={getImageSrc}
@@ -157,12 +157,12 @@ function AcquisitionCard<TItem extends RecentAcquisitionViewItem>({
           </div>
         )}
       </div>
-      <div className="absolute inset-x-0 bottom-0 flex h-1/3 flex-col justify-end rounded-b-quiet-lg bg-linear-to-t from-surface-floating/92 via-surface-floating/68 to-transparent p-5 text-foreground opacity-95 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-        <div className="mb-2 inline-flex max-w-full truncate rounded-quiet-sm font-numeric text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70">
+      <div className="absolute inset-x-0 bottom-0 flex h-2/5 flex-col justify-end rounded-b-quiet-lg bg-linear-to-t from-surface-floating/94 via-surface-floating/72 to-transparent p-4 text-foreground opacity-95 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+        <div className="mb-1 inline-flex max-w-full truncate rounded-quiet-sm font-numeric text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/70">
           {item.number}
         </div>
-        <div className="line-clamp-1 text-base font-bold leading-tight">{title}</div>
-        <div className="mt-1 line-clamp-1 text-sm text-muted-foreground">{actorText}</div>
+        <div className="line-clamp-1 text-sm font-bold leading-tight">{title}</div>
+        <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{actorText}</div>
       </div>
     </>
   );

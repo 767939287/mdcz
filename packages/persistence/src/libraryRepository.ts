@@ -28,7 +28,6 @@ export interface LibraryEntryRecord {
   createdAt: Date;
   lastRefreshedAt: Date | null;
   hiddenFromRecentAt: Date | null;
-  uncensoredAmbiguous: boolean;
   files: LibraryItemFileRecord[];
   assets: LibraryItemAssetRecord[];
 }
@@ -40,7 +39,6 @@ export interface LibraryMovieInput {
   number?: string | null;
   actors?: string[];
   crawlerDataJson?: string | null;
-  uncensoredAmbiguous?: boolean;
   createdAt?: Date;
   lastRefreshedAt?: Date | null;
   assets?: LibraryAssetInput[];
@@ -58,6 +56,8 @@ export interface LibraryFileInput {
   fileId?: string;
   entryIdentity?: string;
   sourceEntryIdentity?: string;
+  /** A hardlinked or copied file's source, which stays on disk. */
+  retainedSourceIdentity?: string | null;
   rootId: string;
   rootRelativePath: string;
   size?: number;
@@ -79,11 +79,42 @@ export interface LibraryEntriesCursor {
   id: string;
 }
 
-export interface ListLibraryEntriesInput {
-  cursor?: LibraryEntriesCursor;
-  limit: number;
+export const LIBRARY_HEALTH_ISSUES = [
+  "missingPoster",
+  "missingBackdrop",
+  "missingSynopsis",
+  "noNfo",
+  "duplicate",
+] as const;
+export type LibraryHealthIssue = (typeof LIBRARY_HEALTH_ISSUES)[number];
+
+/** What narrows a listing or a summary; a movie matches when every given field matches. */
+export interface LibraryEntryFilter {
   query?: string;
   rootId?: string;
+  /** Host directories; a movie matches when one of its files is inside one of them. */
+  pathPrefixes?: readonly string[];
+  health?: LibraryHealthIssue;
+  includeBackdrop?: boolean;
+  actor?: string;
+  studio?: string;
+  tag?: string;
+}
+
+export interface ListLibraryEntriesInput extends LibraryEntryFilter {
+  cursor?: LibraryEntriesCursor;
+  limit: number;
+}
+
+export interface LibraryFacetCount {
+  name: string;
+  count: number;
+}
+
+export interface LibrarySummary {
+  total: number;
+  issues: Record<LibraryHealthIssue, number>;
+  facets: { actors: LibraryFacetCount[]; studios: LibraryFacetCount[]; tags: LibraryFacetCount[] };
 }
 
 export interface LibraryEntriesPage {
@@ -136,8 +167,6 @@ export interface LibraryItemFileRecord {
   partNumber: number | null;
   partSuffix: string | null;
   resolution: string | null;
-  sourceItemId: string | null;
-  sourceRunId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,11 +198,7 @@ const safeActors = (value: string): string[] => {
   }
 };
 
-const toLibraryItemFileRecord = (
-  row: LibraryItemFileRow,
-  sourceRunId: string | null = null,
-  sourceItemId: string | null = null,
-): LibraryItemFileRecord => ({
+const toLibraryItemFileRecord = (row: LibraryItemFileRow): LibraryItemFileRecord => ({
   id: row.id,
   itemId: row.itemId,
   rootId: row.rootId,
@@ -186,8 +211,6 @@ const toLibraryItemFileRecord = (
   partNumber: row.partNumber,
   partSuffix: row.partSuffix,
   resolution: row.resolution,
-  sourceItemId,
-  sourceRunId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -257,7 +280,6 @@ const toLibraryEntryRecord = (
     createdAt: item.createdAt,
     lastRefreshedAt: item.lastRefreshedAt,
     hiddenFromRecentAt: item.hiddenFromRecentAt,
-    uncensoredAmbiguous: item.uncensoredAmbiguous,
     files,
     assets,
   };
@@ -331,6 +353,33 @@ export class LibraryRepository {
             : [],
         ),
     };
+  }
+
+  countCreatedSince(since: Date): number {
+    return (
+      this.database.db
+        .select({ count: sql<number>`count(*)` })
+        .from(libraryItems)
+        .where(sql`${libraryItems.createdAt} >= ${since.getTime()}`)
+        .get()?.count ?? 0
+    );
+  }
+
+  /** Entry identities among `identities` that a library file is, or was hardlinked or copied from. */
+  knownMediaIdentities(identities: readonly string[]): Set<string> {
+    if (!identities.length) return new Set();
+    const values = JSON.stringify(identities);
+    return new Set(
+      this.database.sqlite
+        .prepare<[string, string], { identity: string }>(`
+          SELECT entry_identity AS identity FROM library_item_files WHERE entry_identity IN (SELECT value FROM json_each(?))
+          UNION
+          SELECT retained_source_identity AS identity FROM library_item_files
+          WHERE retained_source_identity IN (SELECT value FROM json_each(?))
+        `)
+        .all(values, values)
+        .map((row) => row.identity),
+    );
   }
 
   inventoryOwnership(refs?: readonly { rootId: string; relativePath: string; entryIdentity?: string }[]) {
@@ -515,16 +564,6 @@ export class LibraryRepository {
     return toLibraryEntryRecord(item, files.get(id) ?? [], assets.get(id) ?? []);
   }
 
-  async listPendingUncensored(): Promise<LibraryEntryRecord[]> {
-    const rows = this.database.db
-      .select({ id: libraryItems.id })
-      .from(libraryItems)
-      .where(eq(libraryItems.uncensoredAmbiguous, true))
-      .all();
-    if (rows.length === 0) return [];
-    return await this.getEntriesByIds(rows.map((row) => row.id));
-  }
-
   async getEntriesByIds(ids: string[]): Promise<LibraryEntryRecord[]> {
     const normalizedIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
     if (normalizedIds.length === 0) {
@@ -631,6 +670,40 @@ export class LibraryRepository {
           : null,
       ...totals,
       total: this.getListCount(baseWhere),
+    };
+  }
+
+  /** Health counts and the most common actors, studios and tags among the movies a filter selects. */
+  summary(filter: Pick<LibraryEntryFilter, "pathPrefixes" | "includeBackdrop">, facetLimit = 30): LibrarySummary {
+    const scope = buildLibraryListWhere(filter) ?? sql`1`;
+    const issueColumns = sql.join(
+      LIBRARY_HEALTH_ISSUES.map(
+        (issue) =>
+          sql`coalesce(sum(CASE WHEN ${healthCondition(issue, filter)} THEN 1 ELSE 0 END), 0) AS ${sql.identifier(issue)}`,
+      ),
+      sql`, `,
+    );
+    const counts = this.database.db.get<Record<"total" | LibraryHealthIssue, number>>(
+      sql`SELECT count(*) AS total, ${issueColumns} FROM library_items WHERE ${scope}`,
+    );
+    const jsonFacet = (values: SQL): LibraryFacetCount[] =>
+      this.database.db.all<LibraryFacetCount>(
+        sql`SELECT facet.value AS name, count(*) AS count FROM library_items, json_each(${values}) AS facet
+          WHERE ${scope} AND facet.value <> '' GROUP BY facet.value ORDER BY count(*) DESC, facet.value LIMIT ${facetLimit}`,
+      );
+    return {
+      total: counts.total,
+      issues: Object.fromEntries(
+        LIBRARY_HEALTH_ISSUES.map((issue) => [issue, counts[issue]]),
+      ) as LibrarySummary["issues"],
+      facets: {
+        actors: jsonFacet(sql`${libraryItems.actorsJson}`),
+        studios: this.database.db.all<LibraryFacetCount>(
+          sql`SELECT ${STUDIO} AS name, count(*) AS count FROM library_items
+            WHERE ${scope} AND ${STUDIO} <> '' GROUP BY ${STUDIO} ORDER BY count(*) DESC, ${STUDIO} LIMIT ${facetLimit}`,
+        ),
+        tags: jsonFacet(sql`json_extract(${libraryItems.crawlerDataJson}, '$.genres')`),
+      },
     };
   }
 
@@ -756,7 +829,7 @@ export class LibraryRepository {
             .orderBy(asc(libraryItemFiles.partNumber), asc(libraryItemFiles.createdAt), asc(libraryItemFiles.id))
             .all()
         : [];
-    return groupByItem(rows.map((row) => toLibraryItemFileRecord(row)));
+    return groupByItem(rows.map(toLibraryItemFileRecord));
   }
 
   private async listAssetsForItems(ids: string[]): Promise<Map<string, LibraryItemAssetRecord[]>> {
@@ -779,8 +852,61 @@ export class LibraryRepository {
   }
 }
 
-const buildLibraryListWhere = (input: Pick<ListLibraryEntriesInput, "query" | "rootId">): SQL | undefined => {
+const STUDIO = sql`json_extract(${libraryItems.crawlerDataJson}, '$.studio')`;
+
+const hasLocalAsset = (kind: string): SQL =>
+  sql`EXISTS (SELECT 1 FROM library_item_assets AS asset WHERE asset.item_id = ${libraryItems.id} AND asset.kind = ${kind} AND asset.root_id IS NOT NULL)`;
+
+// One definition per issue serves the listing filter and the summary counts, so they cannot disagree.
+const HEALTH_CONDITIONS: Record<Exclude<LibraryHealthIssue, "duplicate">, SQL> = {
+  missingPoster: sql`NOT ${hasLocalAsset("poster")}`,
+  missingBackdrop: sql`NOT ${hasLocalAsset("fanart")}`,
+  noNfo: sql`NOT ${hasLocalAsset("nfo")}`,
+  missingSynopsis: sql`coalesce(
+    nullif(trim(json_extract(${libraryItems.crawlerDataJson}, '$.plot_zh')), ''),
+    nullif(trim(json_extract(${libraryItems.crawlerDataJson}, '$.plot')), '')
+  ) IS NULL`,
+};
+
+const pathPrefixCondition = (prefixes: readonly string[], itemId: SQL): SQL => {
+  const matches = prefixes.map((prefix) => {
+    const pattern = `${escapeLikePattern(prefix.replaceAll("\\", "/").replace(/\/+$/u, "").toLowerCase())}/%`;
+    return sql`lower(rtrim(replace(prefix_root.host_path, '\\', '/'), '/') || '/' || prefix_file.root_relative_path) LIKE ${pattern} ESCAPE '\\'`;
+  });
+  return sql`EXISTS (
+    SELECT 1
+    FROM library_item_files AS prefix_file
+    INNER JOIN media_roots AS prefix_root ON prefix_root.id = prefix_file.root_id
+    WHERE prefix_file.item_id = ${itemId}
+      AND (${sql.join(matches.length ? matches : [sql`0`], sql` OR `)})
+  )`;
+};
+
+const healthCondition = (
+  issue: LibraryHealthIssue,
+  filter: Pick<LibraryEntryFilter, "includeBackdrop" | "pathPrefixes">,
+): SQL => {
+  if (issue === "missingBackdrop" && filter.includeBackdrop === false) return sql`0`;
+  if (issue !== "duplicate") return HEALTH_CONDITIONS[issue];
+  // The same number in another library is a different copy, not a duplicate.
+  const sameScope = filter.pathPrefixes ? sql`AND ${pathPrefixCondition(filter.pathPrefixes, sql`other.id`)}` : sql``;
+  return sql`trim(coalesce(${libraryItems.number}, '')) <> '' AND EXISTS (
+    SELECT 1 FROM library_items AS other
+    WHERE other.id <> ${libraryItems.id} AND lower(other.number) = lower(${libraryItems.number}) ${sameScope}
+  )`;
+};
+
+const buildLibraryListWhere = (input: LibraryEntryFilter): SQL | undefined => {
   const filters: SQL[] = [];
+  if (input.pathPrefixes) filters.push(pathPrefixCondition(input.pathPrefixes, sql`${libraryItems.id}`));
+  if (input.health) filters.push(healthCondition(input.health, input));
+  if (input.actor)
+    filters.push(sql`EXISTS (SELECT 1 FROM json_each(${libraryItems.actorsJson}) WHERE value = ${input.actor})`);
+  if (input.studio) filters.push(sql`${STUDIO} = ${input.studio}`);
+  if (input.tag)
+    filters.push(
+      sql`EXISTS (SELECT 1 FROM json_each(json_extract(${libraryItems.crawlerDataJson}, '$.genres')) WHERE value = ${input.tag})`,
+    );
   const rootId = input.rootId?.trim();
   if (rootId) {
     filters.push(

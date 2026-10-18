@@ -1,9 +1,10 @@
+import { SiteError } from "@mdcz/runtime/network";
 import { normalizeCode, normalizeText, uniqueStrings } from "@mdcz/runtime/shared";
 import { Website } from "@mdcz/shared/enums";
 import { stripTrailingActorNames } from "@mdcz/shared/titleRepair";
 import type { CrawlerData } from "@mdcz/shared/types";
 import type { CheerioAPI } from "cheerio";
-
+import type { ContentType } from "../../scrape/utils/movieClassification";
 import { BaseCrawler } from "../base/BaseCrawler";
 import { parseDate } from "../base/parser";
 import type { Context } from "../base/types";
@@ -179,29 +180,6 @@ const productMetadataScore = (product: AvbaseProduct): number => {
   return score;
 };
 
-const workScore = (work: AvbaseSearchWork): [number, number, number, number] => {
-  const products = work.products ?? [];
-  const metadataScore = products.reduce((total, product) => total + productMetadataScore(product), 0);
-  const sceneCount = Math.max(...products.map((product) => productSceneCount(product)), 0);
-  const timestamp = new Date(work.min_date ?? "").getTime();
-  return [
-    products.length,
-    metadataScore,
-    sceneCount,
-    Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY,
-  ];
-};
-
-const compareScores = (left: [number, number, number, number], right: [number, number, number, number]): number => {
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return left[index] - right[index];
-    }
-  }
-
-  return 0;
-};
-
 type AvbasePageProps = NonNullable<NonNullable<AvbaseNextData["props"]>["pageProps"]>;
 type AvbaseProductContainer = Pick<AvbaseSearchWork, "products"> | Pick<AvbaseWork, "products">;
 
@@ -244,18 +222,18 @@ const readDomActors = ($: CheerioAPI): string[] => {
 const readPageProps = ($: CheerioAPI): AvbasePageProps | undefined => {
   const raw = $("script#__NEXT_DATA__").first().text().trim();
   if (!raw) {
-    throw new Error("AVBase parse error: __NEXT_DATA__ missing");
+    throw new SiteError("parse_error", "AVBase parse error: __NEXT_DATA__ missing");
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("AVBase parse error: invalid __NEXT_DATA__ JSON");
+    throw new SiteError("parse_error", "AVBase parse error: invalid __NEXT_DATA__ JSON");
   }
 
   if (!isRecord(parsed)) {
-    throw new Error("AVBase parse error: unexpected __NEXT_DATA__ shape");
+    throw new SiteError("parse_error", "AVBase parse error: unexpected __NEXT_DATA__ shape");
   }
 
   return (parsed as AvbaseNextData).props?.pageProps;
@@ -268,22 +246,32 @@ const readDetailWork = ($: CheerioAPI): AvbaseWork | null | undefined => readPag
 const getProducts = (value: AvbaseProductContainer | null | undefined): AvbaseProduct[] => value?.products ?? [];
 
 /**
- * AVBase can return multiple storefront variants for the same `work_id`.
- * Match by exact normalized code first, then pick the richest product payload.
+ * Works under one maker prefix are storefront variants of one movie. Different makers under the same number are
+ * different movies (SWITCH and Plum both publish SW-130), so no site's data can be attributed to either.
  */
-const pickBestSearchWork = (works: AvbaseSearchWork[], expectedNumber: string): AvbaseSearchWork | undefined => {
-  const candidates = works.filter((work) => normalizeCode(work.work_id) === normalizeCode(expectedNumber));
-  if (candidates.length === 0) {
-    return undefined;
+const resolveSearchWork = (works: AvbaseSearchWork[], expectedNumber: string): AvbaseSearchWork | undefined => {
+  const byMaker = new Map<string, AvbaseSearchWork>();
+  for (const work of works) {
+    if (normalizeCode(work.work_id) !== normalizeCode(expectedNumber)) continue;
+    const prefix = toNonEmptyString(work.prefix) ?? "";
+    if (!byMaker.has(prefix)) byMaker.set(prefix, work);
   }
-
-  return candidates.reduce<AvbaseSearchWork | undefined>((winner, current) => {
-    if (!winner) {
-      return current;
-    }
-
-    return compareScores(workScore(current), workScore(winner)) > 0 ? current : winner;
-  }, undefined);
+  if (byMaker.size > 1) {
+    throw new SiteError("ambiguous", `AVBase lists ${byMaker.size} works under ${expectedNumber}`, {
+      candidates: [...byMaker.values()].map((work) => {
+        const products = getProducts(work);
+        return {
+          site: Website.AVBASE,
+          detailUrl: buildDetailUrl(AVBASE_BASE_URL, work.prefix ?? undefined, work.work_id ?? expectedNumber),
+          title: toNonEmptyString(work.title) ?? expectedNumber,
+          releaseDate: parseAvbaseDate(work.min_date ?? undefined),
+          studio: pickFirstNonEmpty(products, (product) => toNonEmptyString(product.maker?.name)),
+          coverUrl: pickFirstNonEmpty(products, (product) => toNonEmptyString(product.thumbnail_url)),
+        };
+      }),
+    });
+  }
+  return byMaker.values().next().value;
 };
 
 const resolveWorkActors = ($: CheerioAPI, work: AvbaseWork | null | undefined): string[] => {
@@ -333,6 +321,7 @@ const resolveProductMetadata = (products: AvbaseProduct[]): ResolvedAvbaseProduc
 };
 
 export class AvbaseCrawler extends BaseCrawler {
+  static readonly contentTypes: readonly ContentType[] = ["censored"];
   site(): Website {
     return Website.AVBASE;
   }
@@ -347,7 +336,7 @@ export class AvbaseCrawler extends BaseCrawler {
   }
 
   protected async parseSearchPage(context: Context, $: CheerioAPI, _searchUrl: string): Promise<string | null> {
-    const best = pickBestSearchWork(readSearchWorks($), context.number);
+    const best = resolveSearchWork(readSearchWorks($), context.number);
     const workId = toNonEmptyString(best?.work_id);
     if (!workId) {
       return null;
@@ -356,9 +345,9 @@ export class AvbaseCrawler extends BaseCrawler {
     return buildDetailUrl(AVBASE_BASE_URL, best?.prefix ?? undefined, workId);
   }
 
-  protected async parseDetailPage(context: Context, $: CheerioAPI): Promise<CrawlerData | null> {
+  protected async parseDetailPage(_context: Context, $: CheerioAPI): Promise<CrawlerData | null> {
     const work = readDetailWork($);
-    const number = toNonEmptyString(work?.work_id) ?? normalizeText(context.number);
+    const number = toNonEmptyString(work?.work_id) ?? "";
     const rawTitle = toNonEmptyString(work?.title);
     if (!number || !rawTitle) {
       return null;

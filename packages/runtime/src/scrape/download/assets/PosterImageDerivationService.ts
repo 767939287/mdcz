@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, stat, unlink } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
 import { dirname, extname, join, parse } from "node:path";
 import { resolveThumbToPosterCropRegion } from "@mdcz/shared/posterCrop";
 import sharp from "sharp";
@@ -9,7 +9,7 @@ const SMALL_POSTER_THRESHOLD_BYTES = 50_000;
 
 export type PosterDerivationResult =
   | { status: "derived"; path: string }
-  | { status: "skipped"; reason: "large_poster" | "missing_thumb" | "portrait_thumb" | "unreadable_poster" };
+  | { status: "skipped"; reason: "large_poster" | "missing_thumb" | "unreadable_poster" };
 
 interface PosterDerivationLogger {
   warn(message: string): void;
@@ -58,7 +58,8 @@ export class PosterImageDerivationService {
     const outputPath = options.posterPath ?? options.targetPath;
 
     try {
-      const source = sharp(options.thumbPath, { animated: false }).rotate();
+      // libvips can cache an open WebP file on Windows, preventing the subsequent publication rename.
+      const source = sharp(await readFile(options.thumbPath), { animated: false }).rotate();
       const metadata = await source.metadata();
       const width = metadata.width ?? 0;
       const height = metadata.height ?? 0;
@@ -66,10 +67,8 @@ export class PosterImageDerivationService {
         throw new Error(`Unable to read thumb dimensions for ${options.thumbPath}`);
       }
 
+      // A portrait cover is already poster-shaped and is used whole.
       const cropRegion = resolveThumbToPosterCropRegion(width, height);
-      if (!cropRegion) {
-        return { status: "skipped", reason: "portrait_thumb" };
-      }
 
       const parsedPath = parse(outputPath);
       const tempPath = join(
@@ -79,7 +78,7 @@ export class PosterImageDerivationService {
       await mkdir(dirname(tempPath), { recursive: true });
 
       try {
-        await encodePoster(source.extract(cropRegion), outputPath).toFile(tempPath);
+        await encodePoster(cropRegion ? source.extract(cropRegion) : source, outputPath).toFile(tempPath);
         await rename(tempPath, outputPath);
       } finally {
         await unlink(tempPath).catch(() => undefined);

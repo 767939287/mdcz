@@ -61,36 +61,58 @@ For the systemd / AUR / Deb path, see the bundled `README.md` and `systemd/mdcz.
 | `MDCZ_WEB_DIST_DIR` | Static WebUI bundle directory. | `dist/web` in repo builds, `web` in release bundles |
 | `MDCZ_SERVER_BUILD` | Optional build label shown on About. | unset |
 | `MDCZ_WEB_BUILD` | Optional Web build label shown on About. | unset |
-| `MDCZ_AUTOMATION_WEBHOOK_URL` | Optional outbound automation webhook URL. | unset |
-| `MDCZ_AUTOMATION_WEBHOOK_SECRET` | Optional value sent as `x-mdcz-webhook-secret` on outbound webhooks. | unset |
 
-## Automation REST
+## Integrations
 
-Automation endpoints use the same single-admin bearer token as the WebUI:
+MDCz takes new files from downloaders and cloud drives in three ways; every one ends in the same scrape path, so overlapping triggers never scrape a file twice.
+
+- **qBittorrent polling.** Settings → Integrations → qBittorrent: the web UI URL, an API key (qBittorrent 5.2+) or a username and password, and a category. Every minute MDCz lists the category's completed torrents and scrapes each `content_path` that finished after polling began. Torrents already finished when you connect are left alone. The category's save path, after path mappings, must lie inside a library's source directory. Files under that save path are never moved: a `move` library hardlinks them, so torrents keep seeding (the output directory must be on the same volume). Keep that folder outside any MoviePilot download folder with downloader monitoring on, or both tools place the same files.
+- **CloudDrive2 webhook.** Point CloudDrive2's file system watcher at `POST /api/webhooks/clouddrive`. Settings and the Libraries page show when the last event arrived.
+- **`POST /api/automation/scrape/start`** for anything else: download-finished scripts, MoviePilot plugins, cron jobs.
+
+Automation endpoints take an API key created in Settings → Integrations (the WebUI's own session token also works). A key reaches only `/api/automation/*` and `/api/webhooks/*`, never the WebUI.
 
 ```bash
-Authorization: Bearer <token>
+Authorization: Bearer <API key>
 ```
 
-- `POST /api/automation/scrape/start` starts a scrape from `refs` or a scan from `rootId`.
-- `GET /api/automation/library/recent?limit=20` returns recent task webhook payloads.
-- `GET /api/automation/webhooks/status` returns outbound webhook delivery status.
+### `POST /api/automation/scrape/start`
 
-Webhook payload shape:
+Scrapes a file, or every video under a directory, given as the caller sees it. Pass `path` as a query parameter (survives Windows backslashes and spaces) or in a JSON body:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `path` | yes | Absolute path of the finished file or folder. Path mappings from Settings are applied first, so a downloader in another container can send its own path. |
+| `libraryId` | no | Scrape into this library. By default the library whose source directory holds `path` is used. |
+
+```bash
+curl -fsS -X POST -G -H "Authorization: Bearer $MDCZ_KEY"   --data-urlencode "path=/downloads/jav/ABC-123"   http://mdcz:3838/api/automation/scrape/start
+```
+
+The response is `{ "task": …, "webhook": …, "duplicate": false }`. A path the library already holds, or one whose scrape is still running, queues nothing and answers `{ "task": null, "webhook": null, "duplicate": true }`, so repeated calls are safe. A path outside every library, or a folder with no videos, is an error naming the path.
+
+### Other endpoints
+
+- `GET /api/automation/library/recent?limit=20` returns recent tasks in the webhook payload shape.
+- `GET /api/automation/webhooks/status` returns outbound webhook delivery counts and the last error.
+
+### Outbound webhook
+
+Set the webhook URL and secret in Settings → Integrations → Notifications. MDCz posts this JSON when a task first starts running and when it first ends (`completed`, `failed`, `stopped` or `interrupted`), with the secret in `x-mdcz-webhook-secret`:
 
 ```json
 {
   "taskId": "task-id",
-  "kind": "scan",
+  "kind": "scrape",
   "status": "completed",
   "startedAt": "2026-05-01T00:00:00.000Z",
   "completedAt": "2026-05-01T00:01:00.000Z",
-  "summary": "扫描 Media: completed",
+  "summary": "Scrape Media: completed",
   "errors": []
 }
 ```
 
-When `MDCZ_AUTOMATION_WEBHOOK_URL` is set, the server sends the same JSON payload when a task first enters `running` and when it first reaches `completed` or `failed`. Deliveries use one in-process FIFO per configured URL and a 10-second request timeout. They are best-effort notifications: the server does not persist an outbox, retry failed requests, or replay deliveries after a restart. Use `GET /api/automation/library/recent` to reconcile task state.
+Deliveries run through one in-process queue with a 10-second timeout. They are best-effort: nothing is persisted, retried or replayed after a restart. Use `GET /api/automation/library/recent` to reconcile.
 
 ## Reverse Proxy
 

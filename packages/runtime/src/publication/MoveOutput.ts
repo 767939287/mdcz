@@ -7,7 +7,7 @@ import type { RootFileRef } from "@mdcz/shared/mediaRef";
 import { isPrimaryVideoFile } from "../scrape/media/generatedSidecarVideos";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
 import { PublicationConflictError } from "./conflicts";
-import { outputFileSystem } from "./outputFileSystem";
+import { CreatedDirectories, outputFileSystem, removeEmptyDirectory } from "./outputFileSystem";
 import type { PublicationFileSystem } from "./types";
 import { type WriteArtifact, WriteOutput } from "./WriteOutput";
 
@@ -15,6 +15,8 @@ export const PARKED_SOURCE_PREFIX = ".mdcz-relocation-";
 
 export type MediaFileFacts = { dev: number; ino: number; size: number; mtimeMs: number };
 export interface SourceMove extends MediaFileFacts {
+  /** `hardlink` and `copy` leave the source in place. */
+  transfer: "move" | "hardlink" | "copy";
   source: RootFileRef;
   target: RootFileRef;
   sourcePath: string;
@@ -61,6 +63,9 @@ export class MoveOutput {
     const temporaryPaths = new Set<string>();
     const retainedSources = new Map<string, MediaFileFacts>();
     const relocations: Relocation[] = [];
+    let renamedFolder: Relocation | undefined;
+    const warn = (message: string) => this.logger.warn(message);
+    const directories = new CreatedDirectories(fs);
     const targets = new Set(input.moves.map((move) => filesystemPathKey(move.targetPath)));
     if (targets.size !== input.moves.length) throw new Error("Duplicate media move target");
     const targetEntries = new Map<string, Set<string>>();
@@ -97,16 +102,61 @@ export class MoveOutput {
       await assertMoveTargetAbsent(move.targetPath, fs);
     };
     try {
-      return await new WriteOutput(fs, this.logger).install(input.artifacts, {
-        validate: input.validate,
-        protectedMediaFiles: [
-          ...(input.protectedMediaFiles ?? []),
-          ...input.moves.flatMap((move) => [move.sourcePath, move.targetPath]),
-        ],
+      let { moves, artifacts, validate } = input;
+      let protectedMediaFiles = input.protectedMediaFiles ?? [];
+      const [first] = moves;
+      const from = first && path.dirname(first.sourcePath);
+      const to = first && path.dirname(first.targetPath);
+      const inside = (directory: string, candidate: string) => {
+        const relative = path.relative(directory, candidate);
+        return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+      };
+      const sources = new Set(moves.map((move) => filesystemPathKey(move.sourcePath)));
+      // A movie that owns its folder is renamed with it, so a new name leaves no emptied folder behind.
+      if (
+        input.reorganize &&
+        first?.source.relativePath.includes("/") &&
+        filesystemPathKey(from) !== filesystemPathKey(to) &&
+        !inside(from, to) &&
+        moves.every(
+          (move) =>
+            filesystemPathKey(path.dirname(move.sourcePath)) === filesystemPathKey(from) &&
+            filesystemPathKey(path.dirname(move.targetPath)) === filesystemPathKey(to),
+        ) &&
+        (await fs.readdir(from, { withFileTypes: true })).every(
+          (entry) => !isPrimaryVideoFile(entry.name) || sources.has(filesystemPathKey(path.join(from, entry.name))),
+        ) &&
+        !(await fs.lstat(to).then(
+          () => true,
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return false;
+            throw error;
+          },
+        ))
+      ) {
+        // The renamed folder is this publication's from here on, so the old paths are checked before they vanish.
+        await validate?.();
+        validate = undefined;
+        await directories.make(path.dirname(to));
+        await fs.rename(from, to);
+        renamedFolder = { from, to, kind: "renamed" };
+        const carried = (value: string) => (inside(from, value) ? path.join(to, path.relative(from, value)) : value);
+        moves = moves.map((move) => ({ ...move, sourcePath: carried(move.sourcePath) }));
+        artifacts = artifacts.map((artifact) => ({
+          ...artifact,
+          ...("sourcePath" in artifact ? { sourcePath: carried(artifact.sourcePath) } : {}),
+          removeSourcesAfterCommit: artifact.removeSourcesAfterCommit?.map(carried),
+        }));
+        protectedMediaFiles = protectedMediaFiles.map(carried);
+      }
+      const value = await new WriteOutput(fs, this.logger).install(artifacts, {
+        validate,
+        directories,
+        protectedMediaFiles: [...protectedMediaFiles, ...moves.flatMap((move) => [move.sourcePath, move.targetPath])],
         beforeCommit: async () => {
           const parkedSources = new Map<string, string>();
           if (input.reorganize) {
-            for (const move of input.moves) {
+            for (const move of moves) {
               if (!targets.has(filesystemPathKey(move.sourcePath))) continue;
               await assertSource(move, move.sourcePath);
               const parked = path.join(
@@ -119,9 +169,9 @@ export class MoveOutput {
               parkedSources.set(move.sourcePath, parked);
             }
           }
-          for (const move of input.moves) {
+          for (const move of moves) {
             const sourcePath = parkedSources.get(move.sourcePath) ?? move.sourcePath;
-            await fs.mkdir(path.dirname(move.targetPath), { recursive: true });
+            await directories.make(path.dirname(move.targetPath));
             const link = await fs.lstat(sourcePath);
             if (
               link.isSymbolicLink() &&
@@ -130,8 +180,34 @@ export class MoveOutput {
             )
               throw new Error(`Cannot move a relative file symlink to another directory: ${sourcePath}`);
             await assertSource(move, sourcePath, link.isSymbolicLink() ? undefined : link);
+            if (move.transfer === "hardlink" && move.rewrittenContent === undefined) {
+              // Re-publishing a file that already is the library's hardlink only refreshes its metadata.
+              const existing = await fs.stat(move.targetPath).catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return undefined;
+                throw error;
+              });
+              const current = await fs.stat(sourcePath);
+              if (existing && existing.dev === current.dev && existing.ino === current.ino) continue;
+              await assertTarget(move, sourcePath);
+              try {
+                await fs.link(sourcePath, move.targetPath);
+              } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "EXDEV")
+                  throw new Error(
+                    `Hardlinks need the library output on the same volume as the source: ${sourcePath} -> ${move.targetPath}`,
+                    { cause: error },
+                  );
+                throw error;
+              }
+              relocations.push({ from: sourcePath, to: move.targetPath, kind: "copied" });
+              if (isPrimaryVideoFile(move.targetPath))
+                targetEntries
+                  .get(filesystemPathKey(path.dirname(move.targetPath)))
+                  ?.add(filesystemPathKey(move.targetPath));
+              continue;
+            }
             await assertTarget(move, sourcePath);
-            let copied = move.rewrittenContent !== undefined;
+            let copied = move.rewrittenContent !== undefined || move.transfer !== "move";
             if (!copied) {
               try {
                 await fs.rename(sourcePath, move.targetPath);
@@ -159,7 +235,7 @@ export class MoveOutput {
               await fs.rename(staging, move.targetPath);
               temporaryPaths.delete(staging);
               relocations.push({ from: sourcePath, to: move.targetPath, kind: "copied" });
-              retainedSources.set(sourcePath, move);
+              if (move.transfer === "move") retainedSources.set(sourcePath, move);
             } else {
               targetEntries.get(filesystemPathKey(path.dirname(sourcePath)))?.delete(filesystemPathKey(sourcePath));
             }
@@ -184,8 +260,25 @@ export class MoveOutput {
           return value;
         },
       });
+      // A moved file leaves no empty folders between its old place and its media root, which itself always stays.
+      for (const move of input.moves) {
+        if (move.transfer !== "move") continue;
+        let directory = path.dirname(move.sourcePath);
+        for (let depth = move.source.relativePath.split("/").length - 1; depth > 0; depth--) {
+          if (!(await removeEmptyDirectory(fs, directory, warn))) break;
+          directory = path.dirname(directory);
+        }
+      }
+      return value;
     } catch (error) {
-      if (!committed) await this.restore(relocations);
+      if (!committed) {
+        await this.restore(relocations);
+        if (renamedFolder) {
+          // Folders created inside the renamed folder go before it takes its old name back.
+          await directories.removeEmpty(warn);
+          await this.restore([renamedFolder]);
+        }
+      }
       throw error;
     } finally {
       for (const staging of temporaryPaths) {
@@ -195,6 +288,7 @@ export class MoveOutput {
           this.logger.warn(`Failed to remove publication staging ${staging}: ${toErrorMessage(error)}`);
         }
       }
+      if (!committed) await directories.removeEmpty(warn);
     }
   }
 

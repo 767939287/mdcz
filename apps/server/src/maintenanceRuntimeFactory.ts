@@ -1,7 +1,7 @@
 import type { ActorSourceProvider } from "@mdcz/runtime/actorSource";
 import type { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import type { CrawlerProvider } from "@mdcz/runtime/crawler";
-import { MaintenanceRuntime } from "@mdcz/runtime/maintenance";
+import { MaintenanceRuntime, type MaintenanceRuntimeDependencies } from "@mdcz/runtime/maintenance";
 import type { NetworkClient } from "@mdcz/runtime/network";
 import {
   type ActorImageService,
@@ -9,6 +9,7 @@ import {
   DownloadManager,
   FileOrganizer,
   NfoGenerator,
+  type SiteResultSink,
   TranslateService,
 } from "@mdcz/runtime/scrape";
 import { runtimeLoggerService } from "@mdcz/runtime/shared";
@@ -17,12 +18,15 @@ import type { ServerConfigService } from "./services/configService";
 
 export interface ServerMaintenanceRuntimeDependencies {
   config: ServerConfigService;
+  prepareScrapeItem?: MaintenanceRuntimeDependencies["prepareScrapeItem"];
   networkClient: NetworkClient;
   crawlerProvider: CrawlerProvider;
   imageHostCooldownStore: PersistentCooldownStore;
   actorImageService: ActorImageService;
   actorSourceProvider: ActorSourceProvider;
   mappingStore?: TranslationMappingStore;
+  recordSiteResults: SiteResultSink;
+  loadSiteResults: MaintenanceRuntimeDependencies["loadSiteResults"];
 }
 
 export const createServerMaintenanceRuntime = (deps: ServerMaintenanceRuntimeDependencies): MaintenanceRuntime => {
@@ -31,7 +35,10 @@ export const createServerMaintenanceRuntime = (deps: ServerMaintenanceRuntimeDep
     actorImageService: deps.actorImageService,
     actorSourceProvider: deps.actorSourceProvider,
     crawlerProvider: deps.crawlerProvider,
+    recordSiteResults: deps.recordSiteResults,
+    loadSiteResults: deps.loadSiteResults,
     logger,
+    prepareScrapeItem: deps.prepareScrapeItem,
     config: deps.config,
     downloadManager: new DownloadManager(deps.networkClient, {
       imageHostCooldownStore: deps.imageHostCooldownStore,

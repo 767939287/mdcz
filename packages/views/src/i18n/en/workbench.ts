@@ -6,6 +6,8 @@ export const workbench = {
 
   // Frame actions
   analyzingFiles: "Analyzing files…",
+  runSummary: (succeeded: number, failed: number, skipped: number, duration: string | null) =>
+    [`${succeeded} succeeded`, `${failed} failed`, `${skipped} skipped`, duration ?? ""].filter(Boolean).join(" · "),
   resumeScrape: "Resume scrape task",
   pauseScrape: "Pause scrape task",
   resume: "Resume",
@@ -41,11 +43,15 @@ export const workbench = {
   includeSubdirs: "Include subdirectories",
   scanDirPlaceholder: "Select media directory to scan",
   loadingConfig: "Loading config…",
-  outputDirLabel: "Output Directory",
-  outputDirPlaceholder: "Select output directory",
+  libraryLabel: "Library",
+  libraryPlaceholder: "Choose a library",
+  manageLibraries: "Manage libraries",
+  noLibraries: "Create a library first to define the output directory and placement rules.",
+  createLibrary: "Create library",
   inaccessiblePathsWarning: (count: number) => `Some paths are inaccessible; ${count} skipped`,
   selectVisibleFilesAriaLabel: "Select currently visible files",
   refreshFiles: "Refresh files",
+  alreadyInLibrary: "Already in library",
   selectedOfTotalFiles: (selected: number, total: number) => `${selected} / ${total} file(s) selected`,
   searchFilesAriaLabel: "Search files",
   searchFilesPlaceholder: "Search files…",
@@ -66,10 +72,7 @@ export const workbench = {
   // Setup adapter
   cancelScanFailed: (error: string) => `Failed to cancel scan: ${error}`,
   selectScanDirFailed: (error: string) => `Failed to select scan directory: ${error}`,
-  selectOutputDirFailed: (error: string) => `Failed to select output directory: ${error}`,
   enterFullPath: "Please enter a full path",
 
   // Ports
-  selectFilesToScrape: "Please select files to scrape",
-  multiUrlSameDirOnly: "Multi-file scrape by URL only supports files in the same directory under the same media root",
 };

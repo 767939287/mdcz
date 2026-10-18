@@ -4,9 +4,9 @@ import type { SignalService } from "@main/services/SignalService";
 import type { ActorSourceProvider } from "@mdcz/runtime/actorSource";
 import type { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import type { CrawlerProvider } from "@mdcz/runtime/crawler";
-import { MaintenanceRuntime } from "@mdcz/runtime/maintenance";
+import { MaintenanceRuntime, type MaintenanceRuntimeDependencies } from "@mdcz/runtime/maintenance";
 import type { NetworkClient } from "@mdcz/runtime/network";
-import type { ActorImageService } from "@mdcz/runtime/scrape";
+import type { ActorImageService, SiteResultSink } from "@mdcz/runtime/scrape";
 import { DownloadManager, FileOrganizer, NfoGenerator, TranslateService } from "@mdcz/runtime/scrape";
 import { applyDesktopPosterTagBadges } from "../output";
 import { translationMappingStore } from "../translationMappingStore";
@@ -18,6 +18,9 @@ export interface DesktopMaintenanceRuntimeOptions {
   imageHostCooldownStore: PersistentCooldownStore;
   networkClient: NetworkClient;
   signalService: SignalService;
+  prepareScrapeItem?: MaintenanceRuntimeDependencies["prepareScrapeItem"];
+  recordSiteResults: SiteResultSink;
+  loadSiteResults: MaintenanceRuntimeDependencies["loadSiteResults"];
 }
 
 export const createDesktopMaintenanceRuntime = (options: DesktopMaintenanceRuntimeOptions): MaintenanceRuntime => {
@@ -26,7 +29,10 @@ export const createDesktopMaintenanceRuntime = (options: DesktopMaintenanceRunti
     actorImageService: options.actorImageService,
     actorSourceProvider: options.actorSourceProvider,
     crawlerProvider: options.crawlerProvider,
+    recordSiteResults: options.recordSiteResults,
+    loadSiteResults: options.loadSiteResults,
     logger,
+    prepareScrapeItem: options.prepareScrapeItem,
     config: {
       get: async () => await configManager.getValidated(),
     },

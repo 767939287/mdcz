@@ -6,6 +6,7 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
     "IPZZ-907",
     "SNOS-301",
     "SNOS-334",
+    "START-608",
   ],
   "library": [
     {
@@ -16,7 +17,7 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
         "明日葉みつは/IPZZ-907/IPZZ-907.mp4",
       ],
       "number": "IPZZ-907",
-      "title": "明日葉みつは史上【最大絶頂】 中出し解禁 生ハメオーガズム",
+      "title": "明日葉みつは記録【感動瞬間】 旅立ち風景 新パノラマビュー",
     },
     {
       "actors": [
@@ -26,7 +27,7 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
         "浅野こころ/SNOS-301/SNOS-301.mp4",
       ],
       "number": "SNOS-301",
-      "title": "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+      "title": "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     },
     {
       "actors": [
@@ -36,7 +37,17 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
         "瀬戸環奈/SNOS-334/SNOS-334.mp4",
       ],
       "number": "SNOS-334",
-      "title": "最強ビジュOLさん、出張先で死ぬほど嫌いな中年上司と相部屋… でも過激セクハラにまさかの快楽堕ちしちゃう！",
+      "title": "笑顔カフェPRさん、旅行先で心おどる想いと四季風景と写真館… でも素敵デザインにまさかの新世界へゆこうよ！",
+    },
+    {
+      "actors": [
+        "神木麗",
+      ],
+      "files": [
+        "神木麗/START-608/START-608.mp4",
+      ],
+      "number": "START-608",
+      "title": "地域文化研究センタースタッフ14 特別編 NEWSTAR 神木麗 旅として、案内人として、新世界に生きる。",
     },
   ],
   "nfos": {
@@ -55,11 +66,11 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
         "159",
       ],
       "studio": [
-        "アイデアポケット",
+        "ブルースカイシネ",
       ],
       "tag": [],
       "title": [
-        "明日葉みつは史上【最大絶頂】 中出し解禁 生ハメオーガズム",
+        "明日葉みつは記録【感動瞬間】 旅立ち風景 新パノラマビュー",
       ],
     },
     "output/浅野こころ/SNOS-301/SNOS-301.nfo": {
@@ -77,11 +88,11 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
         "140",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+        "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
       ],
     },
     "output/瀬戸環奈/SNOS-334/SNOS-334.nfo": {
@@ -99,11 +110,33 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
         "160",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "最強ビジュOLさん、出張先で死ぬほど嫌いな中年上司と相部屋… でも過激セクハラにまさかの快楽堕ちしちゃう！",
+        "笑顔カフェPRさん、旅行先で心おどる想いと四季風景と写真館… でも素敵デザインにまさかの新世界へゆこうよ！",
+      ],
+    },
+    "output/神木麗/START-608/START-608.nfo": {
+      "actors": [
+        "神木麗",
+      ],
+      "num": [
+        "START-608",
+      ],
+      "originaltitle": [],
+      "premiered": [
+        "2026-07-14",
+      ],
+      "runtime": [
+        "149",
+      ],
+      "studio": [
+        "NEWビジョンズ",
+      ],
+      "tag": [],
+      "title": [
+        "地域文化研究センタースタッフ14 特別編 NEWSTAR 神木麗 旅として、案内人として、新世界に生きる。",
       ],
     },
   },
@@ -111,12 +144,17 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
     [
       "a/SNOS-301.mp4: success",
       "b/IPZZ-907.mp4: success",
+      "c/START-608.mp4: success",
       "SNOS-334.mp4: success",
     ],
   ],
   "tree": [
+    "output/",
+    "output/明日葉みつは/",
+    "output/明日葉みつは/IPZZ-907/",
     "output/明日葉みつは/IPZZ-907/IPZZ-907.mp4 "ipzz"",
     "output/明日葉みつは/IPZZ-907/IPZZ-907.nfo",
+    "output/明日葉みつは/IPZZ-907/extrafanart/",
     "output/明日葉みつは/IPZZ-907/extrafanart/fanart1.jpg 800x534",
     "output/明日葉みつは/IPZZ-907/extrafanart/fanart2.jpg 800x534",
     "output/明日葉みつは/IPZZ-907/extrafanart/fanart3.jpg 800x534",
@@ -125,8 +163,11 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
     "output/明日葉みつは/IPZZ-907/poster.jpg 1032x1468",
     "output/明日葉みつは/IPZZ-907/thumb.jpg 2184x1468",
     "output/明日葉みつは/IPZZ-907/trailer.mp4 <2087 bytes>",
+    "output/浅野こころ/",
+    "output/浅野こころ/SNOS-301/",
     "output/浅野こころ/SNOS-301/SNOS-301.mp4 "snos"",
     "output/浅野こころ/SNOS-301/SNOS-301.nfo",
+    "output/浅野こころ/SNOS-301/extrafanart/",
     "output/浅野こころ/SNOS-301/extrafanart/fanart1.jpg 534x800",
     "output/浅野こころ/SNOS-301/extrafanart/fanart2.jpg 800x534",
     "output/浅野こころ/SNOS-301/extrafanart/fanart3.jpg 800x534",
@@ -135,8 +176,11 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
     "output/浅野こころ/SNOS-301/poster.jpg 1032x1468",
     "output/浅野こころ/SNOS-301/thumb.jpg 2184x1468",
     "output/浅野こころ/SNOS-301/trailer.mp4 <2087 bytes>",
+    "output/瀬戸環奈/",
+    "output/瀬戸環奈/SNOS-334/",
     "output/瀬戸環奈/SNOS-334/SNOS-334.mp4 "snos334"",
     "output/瀬戸環奈/SNOS-334/SNOS-334.nfo",
+    "output/瀬戸環奈/SNOS-334/extrafanart/",
     "output/瀬戸環奈/SNOS-334/extrafanart/fanart1.jpg 600x800",
     "output/瀬戸環奈/SNOS-334/extrafanart/fanart2.jpg 600x800",
     "output/瀬戸環奈/SNOS-334/extrafanart/fanart3.jpg 800x600",
@@ -145,6 +189,20 @@ exports[`scrapes recorded movies end to end: 'batch across folders' 1`] = `
     "output/瀬戸環奈/SNOS-334/poster.jpg 1032x1468",
     "output/瀬戸環奈/SNOS-334/thumb.jpg 2184x1468",
     "output/瀬戸環奈/SNOS-334/trailer.mp4 <2087 bytes>",
+    "output/神木麗/",
+    "output/神木麗/START-608/",
+    "output/神木麗/START-608/START-608.mp4 "start"",
+    "output/神木麗/START-608/START-608.nfo",
+    "output/神木麗/START-608/extrafanart/",
+    "output/神木麗/START-608/extrafanart/fanart1.jpg 562x800",
+    "output/神木麗/START-608/extrafanart/fanart2.jpg 533x800",
+    "output/神木麗/START-608/extrafanart/fanart3.jpg 800x534",
+    "output/神木麗/START-608/fanart.jpg 2184x1542",
+    "output/神木麗/START-608/movie.nfo",
+    "output/神木麗/START-608/poster.jpg 1537x2184",
+    "output/神木麗/START-608/thumb.jpg 2184x1542",
+    "output/神木麗/START-608/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;
@@ -163,7 +221,7 @@ exports[`scrapes recorded movies end to end: 'chinese subtitle marker' 1`] = `
         "浅野こころ/SNOS-301-C/SNOS-301-C.mp4",
       ],
       "number": "SNOS-301",
-      "title": "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+      "title": "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     },
   ],
   "nfos": {
@@ -182,13 +240,13 @@ exports[`scrapes recorded movies end to end: 'chinese subtitle marker' 1`] = `
         "140",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [
         "中文字幕",
       ],
       "title": [
-        "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+        "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
       ],
     },
   },
@@ -198,8 +256,12 @@ exports[`scrapes recorded movies end to end: 'chinese subtitle marker' 1`] = `
     ],
   ],
   "tree": [
+    "output/",
+    "output/浅野こころ/",
+    "output/浅野こころ/SNOS-301-C/",
     "output/浅野こころ/SNOS-301-C/SNOS-301-C.mp4 "video"",
     "output/浅野こころ/SNOS-301-C/SNOS-301-C.nfo",
+    "output/浅野こころ/SNOS-301-C/extrafanart/",
     "output/浅野こころ/SNOS-301-C/extrafanart/fanart1.jpg 534x800",
     "output/浅野こころ/SNOS-301-C/extrafanart/fanart2.jpg 800x534",
     "output/浅野こころ/SNOS-301-C/extrafanart/fanart3.jpg 800x534",
@@ -208,6 +270,7 @@ exports[`scrapes recorded movies end to end: 'chinese subtitle marker' 1`] = `
     "output/浅野こころ/SNOS-301-C/poster.jpg 1032x1468",
     "output/浅野こころ/SNOS-301-C/thumb.jpg 2184x1468",
     "output/浅野こころ/SNOS-301-C/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;
@@ -224,7 +287,7 @@ exports[`scrapes recorded movies end to end: 'fc2 extra moves with its movie' 1`
         "Unknown/FC2-4984259/FC2-4984259.mp4",
       ],
       "number": "FC2-4984259",
-      "title": "【最高額交渉】元人気アイドル１８才/Eカップ。脱退後、即FC2出演。最初で最後の最高額ハメ撮り映像。※高画質5GB原版先着限定配布",
+      "title": "【特別展記念】新進気クリエイ２０年/Aクラス。開幕後、即FC2展示。新規で注目の特選級記念写真映像。※高解像8GB完成記念限定配布",
     },
   ],
   "nfos": {
@@ -247,7 +310,7 @@ exports[`scrapes recorded movies end to end: 'fc2 extra moves with its movie' 1`
         "无码",
       ],
       "title": [
-        "【最高額交渉】元人気アイドル１８才/Eカップ。脱退後、即FC2出演。最初で最後の最高額ハメ撮り映像。※高画質5GB原版先着限定配布",
+        "【特別展記念】新進気クリエイ２０年/Aクラス。開幕後、即FC2展示。新規で注目の特選級記念写真映像。※高解像8GB完成記念限定配布",
       ],
     },
   },
@@ -257,14 +320,19 @@ exports[`scrapes recorded movies end to end: 'fc2 extra moves with its movie' 1`
     ],
   ],
   "tree": [
+    "output/",
+    "output/Unknown/",
+    "output/Unknown/FC2-4984259/",
     "output/Unknown/FC2-4984259/FC2-4984259-特典.mp4 "extra"",
     "output/Unknown/FC2-4984259/FC2-4984259.mp4 "video"",
     "output/Unknown/FC2-4984259/FC2-4984259.nfo",
-    "output/Unknown/FC2-4984259/extrafanart/fanart1.jpg 1280x719",
+    "output/Unknown/FC2-4984259/extrafanart/",
+    "output/Unknown/FC2-4984259/extrafanart/fanart1.jpg 1280x720",
     "output/Unknown/FC2-4984259/fanart.png 1280x720",
     "output/Unknown/FC2-4984259/movie.nfo",
     "output/Unknown/FC2-4984259/poster.png 276x276",
     "output/Unknown/FC2-4984259/thumb.png 1280x720",
+    "source/",
   ],
 }
 `;
@@ -281,6 +349,8 @@ exports[`scrapes recorded movies end to end: 'mixed split disc and standalone fi
     ],
   ],
   "tree": [
+    "output/",
+    "source/",
     "source/SNOS-301-CD2.mp4 "cd2"",
     "source/SNOS-301.mp4 "standalone"",
   ],
@@ -301,7 +371,7 @@ exports[`scrapes recorded movies end to end: 'rerun with current settings' 1`] =
         "SNOS-301.mp4",
       ],
       "number": "SNOS-301",
-      "title": "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+      "title": "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     },
   ],
   "nfos": {
@@ -320,11 +390,11 @@ exports[`scrapes recorded movies end to end: 'rerun with current settings' 1`] =
         "140",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+        "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
       ],
     },
   },
@@ -335,8 +405,11 @@ exports[`scrapes recorded movies end to end: 'rerun with current settings' 1`] =
     ],
   ],
   "tree": [
+    "output/",
+    "source/",
     "source/SNOS-301.mp4 "video"",
     "source/SNOS-301.nfo",
+    "source/extrafanart/",
     "source/extrafanart/fanart1.jpg 534x800",
     "source/extrafanart/fanart2.jpg 800x534",
     "source/extrafanart/fanart3.jpg 800x534",
@@ -364,7 +437,7 @@ exports[`scrapes recorded movies end to end: 'rescrape replaces stale metadata' 
         "浅野こころ/SNOS-301/SNOS-301.mp4",
       ],
       "number": "SNOS-301",
-      "title": "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+      "title": "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     },
   ],
   "nfos": {
@@ -383,11 +456,11 @@ exports[`scrapes recorded movies end to end: 'rescrape replaces stale metadata' 
         "140",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+        "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
       ],
     },
   },
@@ -400,8 +473,12 @@ exports[`scrapes recorded movies end to end: 'rescrape replaces stale metadata' 
     ],
   ],
   "tree": [
+    "output/",
+    "output/浅野こころ/",
+    "output/浅野こころ/SNOS-301/",
     "output/浅野こころ/SNOS-301/SNOS-301.mp4 "video"",
     "output/浅野こころ/SNOS-301/SNOS-301.nfo",
+    "output/浅野こころ/SNOS-301/extrafanart/",
     "output/浅野こころ/SNOS-301/extrafanart/fanart1.jpg 534x800",
     "output/浅野こころ/SNOS-301/extrafanart/fanart2.jpg 800x534",
     "output/浅野こころ/SNOS-301/extrafanart/fanart3.jpg 800x534",
@@ -410,6 +487,7 @@ exports[`scrapes recorded movies end to end: 'rescrape replaces stale metadata' 
     "output/浅野こころ/SNOS-301/poster.jpg 1032x1468",
     "output/浅野こころ/SNOS-301/thumb.jpg 2184x1468",
     "output/浅野こころ/SNOS-301/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;
@@ -428,7 +506,7 @@ exports[`scrapes recorded movies end to end: 'single file' 1`] = `
         "浅野こころ/SNOS-301/SNOS-301.mp4",
       ],
       "number": "SNOS-301",
-      "title": "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+      "title": "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     },
   ],
   "nfos": {
@@ -447,11 +525,11 @@ exports[`scrapes recorded movies end to end: 'single file' 1`] = `
         "140",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+        "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
       ],
     },
   },
@@ -461,8 +539,12 @@ exports[`scrapes recorded movies end to end: 'single file' 1`] = `
     ],
   ],
   "tree": [
+    "output/",
+    "output/浅野こころ/",
+    "output/浅野こころ/SNOS-301/",
     "output/浅野こころ/SNOS-301/SNOS-301.mp4 "video"",
     "output/浅野こころ/SNOS-301/SNOS-301.nfo",
+    "output/浅野こころ/SNOS-301/extrafanart/",
     "output/浅野こころ/SNOS-301/extrafanart/fanart1.jpg 534x800",
     "output/浅野こころ/SNOS-301/extrafanart/fanart2.jpg 800x534",
     "output/浅野こころ/SNOS-301/extrafanart/fanart3.jpg 800x534",
@@ -471,6 +553,7 @@ exports[`scrapes recorded movies end to end: 'single file' 1`] = `
     "output/浅野こころ/SNOS-301/poster.jpg 1032x1468",
     "output/浅野こころ/SNOS-301/thumb.jpg 2184x1468",
     "output/浅野こころ/SNOS-301/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;
@@ -490,7 +573,7 @@ exports[`scrapes recorded movies end to end: 'split disc' 1`] = `
         "浅野こころ/SNOS-301/SNOS-301-CD2.mp4",
       ],
       "number": "SNOS-301",
-      "title": "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+      "title": "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
     },
   ],
   "nfos": {
@@ -509,11 +592,11 @@ exports[`scrapes recorded movies end to end: 'split disc' 1`] = `
         "140",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "【主従逆転】仕えるだけじゃ物足りない。本当はわたくしに支配されたいんでしょう？",
+        "【四季風情】巡ることだけで風景ひろい。記憶のどこかへと感動とどけてゆきたいな？",
       ],
     },
   },
@@ -524,9 +607,13 @@ exports[`scrapes recorded movies end to end: 'split disc' 1`] = `
     ],
   ],
   "tree": [
+    "output/",
+    "output/浅野こころ/",
+    "output/浅野こころ/SNOS-301/",
     "output/浅野こころ/SNOS-301/SNOS-301-CD1.mp4 "cd1"",
     "output/浅野こころ/SNOS-301/SNOS-301-CD2.mp4 "cd2"",
     "output/浅野こころ/SNOS-301/SNOS-301.nfo",
+    "output/浅野こころ/SNOS-301/extrafanart/",
     "output/浅野こころ/SNOS-301/extrafanart/fanart1.jpg 534x800",
     "output/浅野こころ/SNOS-301/extrafanart/fanart2.jpg 800x534",
     "output/浅野こころ/SNOS-301/extrafanart/fanart3.jpg 800x534",
@@ -535,6 +622,7 @@ exports[`scrapes recorded movies end to end: 'split disc' 1`] = `
     "output/浅野こころ/SNOS-301/poster.jpg 1032x1468",
     "output/浅野こころ/SNOS-301/thumb.jpg 2184x1468",
     "output/浅野こころ/SNOS-301/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;
@@ -553,7 +641,7 @@ exports[`scrapes recorded movies end to end: 'strm with relative target' 1`] = `
         "瀬戸環奈/SNOS-334/SNOS-334.strm",
       ],
       "number": "SNOS-334",
-      "title": "最強ビジュOLさん、出張先で死ぬほど嫌いな中年上司と相部屋… でも過激セクハラにまさかの快楽堕ちしちゃう！",
+      "title": "笑顔カフェPRさん、旅行先で心おどる想いと四季風景と写真館… でも素敵デザインにまさかの新世界へゆこうよ！",
     },
   ],
   "nfos": {
@@ -572,11 +660,11 @@ exports[`scrapes recorded movies end to end: 'strm with relative target' 1`] = `
         "160",
       ],
       "studio": [
-        "エスワン ナンバーワンスタイル",
+        "ドリーム ナンバーワンスタイル",
       ],
       "tag": [],
       "title": [
-        "最強ビジュOLさん、出張先で死ぬほど嫌いな中年上司と相部屋… でも過激セクハラにまさかの快楽堕ちしちゃう！",
+        "笑顔カフェPRさん、旅行先で心おどる想いと四季風景と写真館… でも素敵デザインにまさかの新世界へゆこうよ！",
       ],
     },
   },
@@ -586,9 +674,14 @@ exports[`scrapes recorded movies end to end: 'strm with relative target' 1`] = `
     ],
   ],
   "tree": [
+    "library/",
     "library/SNOS-334.mp4 "video"",
+    "output/",
+    "output/瀬戸環奈/",
+    "output/瀬戸環奈/SNOS-334/",
     "output/瀬戸環奈/SNOS-334/SNOS-334.nfo",
     "output/瀬戸環奈/SNOS-334/SNOS-334.strm "#KODIPROP:inputstream=inputstream.adaptive\\n<root>/library/SNOS-334.mp4\\n"",
+    "output/瀬戸環奈/SNOS-334/extrafanart/",
     "output/瀬戸環奈/SNOS-334/extrafanart/fanart1.jpg 600x800",
     "output/瀬戸環奈/SNOS-334/extrafanart/fanart2.jpg 600x800",
     "output/瀬戸環奈/SNOS-334/extrafanart/fanart3.jpg 800x600",
@@ -597,6 +690,7 @@ exports[`scrapes recorded movies end to end: 'strm with relative target' 1`] = `
     "output/瀬戸環奈/SNOS-334/poster.jpg 1032x1468",
     "output/瀬戸環奈/SNOS-334/thumb.jpg 2184x1468",
     "output/瀬戸環奈/SNOS-334/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;
@@ -615,7 +709,7 @@ exports[`scrapes recorded movies end to end: 'subtitle sidecars' 1`] = `
         "明日葉みつは/IPZZ-907-C/IPZZ-907-C.mp4",
       ],
       "number": "IPZZ-907",
-      "title": "明日葉みつは史上【最大絶頂】 中出し解禁 生ハメオーガズム",
+      "title": "明日葉みつは記録【感動瞬間】 旅立ち風景 新パノラマビュー",
     },
   ],
   "nfos": {
@@ -634,13 +728,13 @@ exports[`scrapes recorded movies end to end: 'subtitle sidecars' 1`] = `
         "159",
       ],
       "studio": [
-        "アイデアポケット",
+        "ブルースカイシネ",
       ],
       "tag": [
         "中文字幕",
       ],
       "title": [
-        "明日葉みつは史上【最大絶頂】 中出し解禁 生ハメオーガズム",
+        "明日葉みつは記録【感動瞬間】 旅立ち風景 新パノラマビュー",
       ],
     },
   },
@@ -650,10 +744,14 @@ exports[`scrapes recorded movies end to end: 'subtitle sidecars' 1`] = `
     ],
   ],
   "tree": [
+    "output/",
+    "output/明日葉みつは/",
+    "output/明日葉みつは/IPZZ-907-C/",
     "output/明日葉みつは/IPZZ-907-C/IPZZ-907-C.ass "ass"",
     "output/明日葉みつは/IPZZ-907-C/IPZZ-907-C.mp4 "video"",
     "output/明日葉みつは/IPZZ-907-C/IPZZ-907-C.nfo",
     "output/明日葉みつは/IPZZ-907-C/IPZZ-907-C.zh.srt "srt"",
+    "output/明日葉みつは/IPZZ-907-C/extrafanart/",
     "output/明日葉みつは/IPZZ-907-C/extrafanart/fanart1.jpg 800x534",
     "output/明日葉みつは/IPZZ-907-C/extrafanart/fanart2.jpg 800x534",
     "output/明日葉みつは/IPZZ-907-C/extrafanart/fanart3.jpg 800x534",
@@ -662,6 +760,7 @@ exports[`scrapes recorded movies end to end: 'subtitle sidecars' 1`] = `
     "output/明日葉みつは/IPZZ-907-C/poster.jpg 1032x1468",
     "output/明日葉みつは/IPZZ-907-C/thumb.jpg 2184x1468",
     "output/明日葉みつは/IPZZ-907-C/trailer.mp4 <2087 bytes>",
+    "source/",
   ],
 }
 `;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
+  filesystemPathKey,
   listRootFiles,
   type MediaRoot,
   normalizeHostPath,
@@ -145,8 +146,6 @@ export class ScanQueueService {
     if (this.closing) throw new Error("Scan queue is closing");
     const configuration = await this.config.get();
     const excludeDirPaths = input.excludeDirPaths?.map((path) => normalizeHostPath(path)) ?? [];
-    const metadataPath = configuration.behavior.metadataOnly ? configuration.paths.metadataPath.trim() : "";
-    if (metadataPath) excludeDirPaths.push(metadataPath);
     const admitted = await this.mediaRoots.admitDirectory({ hostPath: input.scanDir });
     const root = admitted.root;
     const hostPath = admitted.hostPath;
@@ -162,6 +161,10 @@ export class ScanQueueService {
       deduplicateDirectories: true,
       ...createMediaWalkFilters(configuration, supported.size ? supported : undefined),
     });
+    const { repositories } = await this.persistence.getState();
+    const inLibrary = repositories.library.knownMediaIdentities(
+      files.map((file) => filesystemPathKey(path.resolve(file.absolutePath))),
+    );
     return {
       warnings,
       candidates: files.map((file) => {
@@ -173,6 +176,7 @@ export class ScanQueueService {
           lastModified: file.modifiedAt?.toISOString() ?? null,
           extension: path.extname(file.relativePath).replace(/^\./u, "").toLowerCase(),
           ref: { rootId: resolved.root.id, relativePath: resolved.relativePath },
+          inLibrary: inLibrary.has(filesystemPathKey(path.resolve(file.absolutePath))),
         };
       }),
     };
@@ -212,11 +216,8 @@ export class ScanQueueService {
   }
 
   private async scanDirectory(root: MediaRoot, signal?: AbortSignal): Promise<ScanDirectoryResult> {
-    const configuration = await this.config.get();
-    const metadataPath = configuration.behavior.metadataOnly ? configuration.paths.metadataPath.trim() : "";
     const files = excludeGeneratedStrmPaths(
       await listRootFiles(root, "", true, signal, {
-        excludeDirectoryPaths: metadataPath ? [metadataPath] : [],
         filterFile: isPrimaryVideoFile,
       }),
       (file) => file.absolutePath,

@@ -18,7 +18,6 @@ export interface OverviewOutputSummary {
   fileCount: number;
   totalBytes: number;
   scannedAt: number;
-  rootPath: string | null;
 }
 
 export type OverviewIpcContract = {

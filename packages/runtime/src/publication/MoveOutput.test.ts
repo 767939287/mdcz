@@ -32,6 +32,7 @@ const fixture = async () => {
     sourcePath,
     targetPath,
     move: {
+      transfer: "move" as "move" | "hardlink" | "copy",
       source: { rootId: "root", relativePath: "source.mp4" },
       target: { rootId: "root", relativePath: "library/target.mp4" },
       sourcePath,
@@ -45,13 +46,19 @@ const fixture = async () => {
 };
 
 describe("MoveOutput", () => {
-  it("restores uncommitted media when the database commit fails", async () => {
+  it("restores uncommitted media and metadata when the database commit fails", async () => {
     const test = await fixture();
     const nfoPath = path.join(path.dirname(test.targetPath), "movie.nfo");
+    const posterPath = path.join(path.dirname(test.targetPath), "poster.jpg");
+    await fs.mkdir(path.dirname(posterPath), { recursive: true });
+    await writeFile(posterPath, "old poster");
     await expect(
       new MoveOutput().install({
         moves: [test.move],
-        artifacts: [{ targetPath: nfoPath, data: "nfo" }],
+        artifacts: [
+          { targetPath: nfoPath, data: "nfo" },
+          { targetPath: posterPath, data: "new poster" },
+        ],
         commit: () => {
           expect(existsSync(test.targetPath)).toBe(true);
           throw new Error("commit failed");
@@ -60,7 +67,9 @@ describe("MoveOutput", () => {
     ).rejects.toThrow("commit failed");
     await expect(readFile(test.sourcePath, "utf8")).resolves.toBe("video");
     await expect(readFile(test.targetPath)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(nfoPath, "utf8")).resolves.toBe("nfo");
+    await expect(readFile(nfoPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(posterPath, "utf8")).resolves.toBe("old poster");
+    expect(await fs.readdir(path.dirname(test.targetPath))).toEqual(["poster.jpg"]);
 
     const rewritten = await fixture();
     await expect(
@@ -74,6 +83,7 @@ describe("MoveOutput", () => {
     ).rejects.toThrow("commit failed");
     await expect(readFile(rewritten.sourcePath, "utf8")).resolves.toBe("video");
     await expect(readFile(rewritten.targetPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(existsSync(path.dirname(rewritten.targetPath))).toBe(false);
 
     const crossDevice = await fixture();
     await expect(
@@ -168,10 +178,95 @@ describe("MoveOutput", () => {
     });
     expect(readdir).toHaveBeenCalledOnce();
     await expect(readFile(secondTarget, "utf8")).resolves.toBe("second");
+
+    // A scrape removes the download folders it emptied, but never the media root they sit in.
+    const downloaded = await fixture();
+    const downloadFolder = path.join(downloaded.directory, "a", "SNOS-301");
+    await fs.mkdir(downloadFolder, { recursive: true });
+    const downloadedVideo = path.join(downloadFolder, "SNOS-301.mp4");
+    const subtitle = path.join(downloadFolder, "SNOS-301.srt");
+    await fs.rename(downloaded.sourcePath, downloadedVideo);
+    await writeFile(subtitle, "srt");
+    await new MoveOutput().install({
+      moves: [
+        {
+          ...downloaded.move,
+          sourcePath: downloadedVideo,
+          source: { rootId: "root", relativePath: "a/SNOS-301/SNOS-301.mp4" },
+        },
+      ],
+      artifacts: [
+        {
+          targetPath: path.join(path.dirname(downloaded.targetPath), "SNOS-301.srt"),
+          sourcePath: subtitle,
+          size: 3,
+          removeSourcesAfterCommit: [subtitle],
+        },
+      ],
+      commit: () => undefined,
+    });
+    expect(existsSync(path.join(downloaded.directory, "a"))).toBe(false);
+    expect(existsSync(downloaded.directory)).toBe(true);
+
+    // Reorganizing renames the movie's own folder, carrying files the publication does not know about along.
+    const renamed = await fixture();
+    const oldFolder = path.join(renamed.directory, "Actor", "ABC-123");
+    const newFolder = path.join(renamed.directory, "Actor", "ABC-123-破解");
+    await fs.mkdir(path.join(oldFolder, "extrafanart"), { recursive: true });
+    const oldVideo = path.join(oldFolder, "ABC-123.mp4");
+    const oldNfo = path.join(oldFolder, "ABC-123.nfo");
+    const fanart = path.join(oldFolder, "extrafanart", "fanart1.jpg");
+    await fs.rename(renamed.sourcePath, oldVideo);
+    await writeFile(oldNfo, "old nfo");
+    await writeFile(fanart, "fanart");
+    await writeFile(path.join(oldFolder, "notes.txt"), "mine");
+    const reorganize = (commit: () => void) =>
+      new MoveOutput().install({
+        reorganize: true,
+        moves: [
+          {
+            ...renamed.move,
+            source: { rootId: "root", relativePath: "Actor/ABC-123/ABC-123.mp4" },
+            target: { rootId: "root", relativePath: "Actor/ABC-123-破解/ABC-123-破解.mp4" },
+            sourcePath: oldVideo,
+            targetPath: path.join(newFolder, "ABC-123-破解.mp4"),
+          },
+        ],
+        artifacts: [
+          { targetPath: path.join(newFolder, "ABC-123-破解.nfo"), data: "nfo", removeSourcesAfterCommit: [oldNfo] },
+          {
+            targetPath: path.join(newFolder, "extrafanart", "fanart1.jpg"),
+            sourcePath: fanart,
+            size: 6,
+            removeSourcesAfterCommit: [fanart],
+          },
+        ],
+        commit,
+      });
+    const oldTree = (await fs.readdir(renamed.directory, { recursive: true })).sort();
+    await expect(
+      reorganize(() => {
+        throw new Error("commit failed");
+      }),
+    ).rejects.toThrow("commit failed");
+    expect((await fs.readdir(renamed.directory, { recursive: true })).sort()).toEqual(oldTree);
+    await reorganize(() => undefined);
+    expect((await fs.readdir(renamed.directory, { recursive: true })).sort()).toEqual(
+      [
+        "Actor",
+        "Actor/ABC-123-破解",
+        "Actor/ABC-123-破解/ABC-123-破解.mp4",
+        "Actor/ABC-123-破解/ABC-123-破解.nfo",
+        "Actor/ABC-123-破解/extrafanart",
+        "Actor/ABC-123-破解/extrafanart/fanart1.jpg",
+        "Actor/ABC-123-破解/notes.txt",
+      ].map((name) => name.replaceAll("/", path.sep)),
+    );
   });
 
   it("rejects occupied destinations and changes after initial observation before mutation", async () => {
-    for (const transfer of ["rename", "copy", "rewrite"] as const) {
+    // "copy" is a cross-device move; "duplicate" and "hardlink" are library placements that keep the source.
+    for (const transfer of ["rename", "copy", "rewrite", "duplicate", "hardlink"] as const) {
       const local = await fixture();
       const targetPath = path.join(local.directory, "source.mkv");
       const conflictPath = path.join(local.directory, "source.avi");
@@ -179,8 +274,9 @@ describe("MoveOutput", () => {
         ...local.move,
         target: { rootId: "root", relativePath: "source.mkv" },
         targetPath,
+        transfer: transfer === "hardlink" ? "hardlink" : transfer === "duplicate" ? "copy" : "move",
         rewrittenContent: transfer === "rewrite" ? "rewritten" : undefined,
-      };
+      } as const;
       const flush = vi.fn(async (path: string) => await outputFileSystem.flush?.(path));
       const output = new MoveOutput({
         ...outputFileSystem,
@@ -206,10 +302,33 @@ describe("MoveOutput", () => {
         "committed",
       );
       expect(commit).toHaveBeenCalledOnce();
-      expect(flush).toHaveBeenCalledTimes(transfer === "copy" ? 1 : 0);
+      expect(flush).toHaveBeenCalledTimes(transfer === "copy" || transfer === "duplicate" ? 1 : 0);
       await expect(readFile(targetPath, "utf8")).resolves.toBe(transfer === "rewrite" ? "rewritten" : "video");
-      await expect(readFile(local.sourcePath)).rejects.toMatchObject({ code: "ENOENT" });
+      if (transfer === "duplicate" || transfer === "hardlink") {
+        await expect(readFile(local.sourcePath, "utf8")).resolves.toBe("video");
+        expect((await fs.stat(targetPath)).ino === (await fs.stat(local.sourcePath)).ino).toBe(transfer === "hardlink");
+        if (transfer === "hardlink") {
+          // Publishing the same physical file again only refreshes the entry.
+          await expect(output.install({ moves: [move], artifacts: [], reorganize: true, commit })).resolves.toBe(
+            "committed",
+          );
+          await expect(readFile(targetPath, "utf8")).resolves.toBe("video");
+        }
+      } else {
+        await expect(readFile(local.sourcePath)).rejects.toMatchObject({ code: "ENOENT" });
+      }
     }
+    const crossVolume = await fixture();
+    await expect(
+      new MoveOutput({
+        ...outputFileSystem,
+        link: async () => {
+          throw Object.assign(new Error("cross device"), { code: "EXDEV" });
+        },
+      }).install({ moves: [{ ...crossVolume.move, transfer: "hardlink" }], artifacts: [], commit: () => undefined }),
+    ).rejects.toThrow("same volume");
+    await expect(readFile(crossVolume.sourcePath, "utf8")).resolves.toBe("video");
+    await expect(readFile(crossVolume.targetPath)).rejects.toMatchObject({ code: "ENOENT" });
     const test = await fixture();
     await fs.mkdir(path.dirname(test.targetPath), { recursive: true });
     await writeFile(test.targetPath, "existing");

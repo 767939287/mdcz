@@ -11,13 +11,28 @@ export const queryKeys = {
     defaults: ["config", "defaults"] as const,
     profiles: ["config", "profiles"] as const,
   },
+  activity: {
+    list: ["activity", "list"] as const,
+  },
   overview: {
     all: ["overview"] as const,
     summary: ["overview", "summary"] as const,
+    sites: ["overview", "sites"] as const,
   },
   library: {
     all: ["library"] as const,
-    list: (query: string) => ["library", "list", query] as const,
+    list: (filters: object) => ["library", "list", filters] as const,
+    summary: (libraryId: string | undefined) => ["library", "summary", libraryId ?? ""] as const,
+  },
+  libraries: {
+    all: ["libraries"] as const,
+  },
+  integrations: {
+    status: ["integrations", "status"] as const,
+  },
+  pending: {
+    all: ["pending"] as const,
+    detail: (id: string) => ["pending", "detail", id] as const,
   },
   logs: {
     all: ["logs"] as const,

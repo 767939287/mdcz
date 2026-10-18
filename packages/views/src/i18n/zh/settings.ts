@@ -138,9 +138,49 @@ export const settings: Messages["settings"] = {
       ],
     },
   },
-  sharedDirectoryNotice: {
-    lead: "当前文件夹模板不会为每部影片创建独立目录，属于共享目录模式。推荐默认使用 ",
-    tail: "；如需共享目录，保存时会校验相关命名规则。",
+  templatesMovedNotice: "文件夹与文件名模板按库设置，与输出目录和视频放置方式放在一起。",
+  notificationChannels: { telegram: "Telegram", bark: "Bark", ntfy: "ntfy" },
+  pathMappings: {
+    from: "下载器路径",
+    to: "MDCz 路径",
+    fromPlaceholder: "/downloads",
+    toPlaceholder: "/mnt/media/downloads",
+    add: "添加映射",
+    remove: "删除映射",
+  },
+  integrations: {
+    access: "下载器接入",
+    accessDescription: "供下载器与网盘调用自动化接口，无法用于登录网页界面。",
+    notifications: "通知",
+    keyName: "名称",
+    keyNamePlaceholder: "qBittorrent",
+    create: "创建 Key",
+    created: "请立即复制这个 Key，它不会再次显示。",
+    copy: "复制",
+    copied: "已复制",
+    revoke: "吊销",
+    lastUsed: (value) => (value ? `最近使用 ${value}` : "从未使用"),
+    noKeys: "还没有 API Key。",
+    commandTitle: "下载完成时运行命令",
+    commandHint:
+      "用于 MDCz 不轮询的下载器。在 qBittorrent 中粘贴到 选项 → 下载 →「Torrent 完成时运行外部程序」，%F 为完成的文件或文件夹。对应媒体库请选用硬链接，种子才能继续做种。",
+    clouddriveTitle: "CloudDrive2",
+    clouddriveHint:
+      "在 CloudDrive2 的文件系统监控中，向此地址发送 POST，并带上请求头 Authorization: Bearer <API Key>。",
+    clouddriveLastEvent: (time) =>
+      time ? `最近一次收到 CloudDrive2 事件：${time}` : "MDCz 启动以来尚未收到 CloudDrive2 事件。",
+    qbittorrent: "qBittorrent",
+    qbittorrentDescription: "每分钟轮询并刮削分类中新完成的种子（启动前已完成的项目不处理）。",
+    qbittorrentOff: "填写地址和分类后开始轮询。",
+    qbittorrentError: (error) => `qBittorrent 检查失败：${error}`,
+    qbittorrentChecked: (time, library) =>
+      library ? `${time} 已检查；完成的种子进入媒体库「${library}」。` : `${time} 已检查。`,
+    qbittorrentNoLibrary: "保存路径未匹配到任何媒体库的来源目录，请添加媒体库或配置路径映射。",
+    qbittorrentFailures: (count) => `${count} 个种子未能刮削，MDCz 每分钟重试：`,
+    addressHint: "以下地址取自当前浏览器。若下载器运行在其他容器中，请换成该容器能访问到的地址。",
+    sendTest: "发送测试消息",
+    sendingTest: "发送中...",
+    testSent: "测试消息已发送到所有已启用的渠道",
   },
   testFailed: (error) => `测试失败: ${error}`,
   verifying: "验证中...",
@@ -148,8 +188,6 @@ export const settings: Messages["settings"] = {
   waitForAutosave: "请等待自动保存完成，再重启应用",
   relaunchFailed: (error) => `重启失败: ${error}`,
   relaunchApp: "重启应用",
-  metadataOnlyNotice: "已开启「仅输出元数据」模式，已停用视频移动与重命名。",
-  metadataPathRequired: "启用仅输出元数据时，必须指定元数据输出目录",
   sitePriority: {
     options: {
       dmm_family: {
@@ -159,8 +197,7 @@ export const settings: Messages["settings"] = {
       },
       official: {
         label: "厂商官网",
-        description:
-          "聚合 MGStage、Prestige、Faleno、Dahlia、KM Produce 等厂商或厂牌自有站点，适合对应厂牌作品，覆盖范围较窄，成功率随站点和编号差异较大。",
+        description: "片商官方网站，仅查询自家番号。优势为标题纯净无演员名、简介无马赛克遮挡，但简介通常未分段。",
       },
       avbase: {
         label: "avbase",
@@ -186,6 +223,11 @@ export const settings: Messages["settings"] = {
       h0930_family: {
         label: "H0930 / H4610",
         description: "网络自营独立制作站。采用专属站内编号（如 H0930/H4610）",
+      },
+      uncensored_official: {
+        label: "无码片商官网",
+        description:
+          "一本道、天然むすめ、Caribbeancom、HEYZO 官方元数据；使用 1PON、10MU、CARIB、HEYZO 番号，无需登录。",
       },
       fc2: {
         label: "fc2",
@@ -253,11 +295,7 @@ export const settings: Messages["settings"] = {
       actorAliasEmpty: "演员别名不能为空",
       actorAliasConflict: "演员名称与其他别名组冲突",
       globalTimeoutNotGreater: "全局超时必须大于单爬虫超时",
-      metadataPathNotAbsolute: "元数据输出目录必须使用绝对路径",
-      sharedDirectoryAssetNaming: "共享目录模式下，附属文件命名必须使用“跟随影片文件名”",
-      sharedDirectoryNfoNaming: "共享目录模式下，NFO 文件命名必须使用“仅 文件名.nfo”",
-      sharedDirectorySceneImages: "共享目录模式下不支持下载剧照，请关闭“下载剧照”",
-      optionalSegmentPathSeparator: "[] 可选段不能包含路径分隔符，请仅在单个路径片段内使用可选内容",
+      actorPhotoFolderNotAbsolute: "本地演员照片目录必须使用绝对路径",
       jellyfinUserIdNotUuid: "Jellyfin 用户 ID 必须为 UUID，留空则按服务端默认处理",
     } satisfies Record<ConfigIssueCode, string>,
   },

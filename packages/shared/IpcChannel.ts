@@ -5,7 +5,6 @@ export enum IpcChannel {
   Config_Save = "config:save",
   Config_List = "config:list",
   Config_Reset = "config:reset",
-  Config_PreviewNaming = "config:preview-naming",
   Config_ListProfiles = "config:list-profiles",
   Config_CreateProfile = "config:create-profile",
   Config_SwitchProfile = "config:switch-profile",
@@ -21,7 +20,6 @@ export enum IpcChannel {
   Scraper_GetStatus = "scraper:get-status",
   Scraper_Retry = "scraper:retry",
   Scraper_RerunDirectory = "scraper:rerunDirectory",
-  Scraper_ConfirmUncensored = "scraper:confirm-uncensored",
 
   Crawler_Test = "crawler:test",
   Crawler_ListSites = "crawler:list-sites",
@@ -62,13 +60,26 @@ export enum IpcChannel {
   Overview_GetOutputSummary = "overview:get-output-summary",
 
   Library_List = "library:list",
+  Library_Summary = "library:summary",
   Library_Availability = "library:availability",
   Library_Delete = "library:delete",
   Library_RemoveFile = "library:removeFile",
   Library_RelinkFile = "library:relinkFile",
 
+  Libraries_List = "libraries:list",
+  Libraries_Create = "libraries:create",
+  Libraries_Update = "libraries:update",
+  Libraries_Delete = "libraries:delete",
+  Libraries_PreviewNaming = "libraries:preview-naming",
+  Libraries_ProbeStubs = "libraries:probe-stubs",
+
+  Pending_List = "pending:list",
+  Pending_Detail = "pending:detail",
+  Pending_Retry = "pending:retry",
+  Pending_ConfirmUncensored = "pending:confirm-uncensored",
+  Pending_Ignore = "pending:ignore",
+
   MediaRoots_EnsurePath = "mediaRoots:ensurePath",
-  MediaRoots_PrepareOutputDirectory = "mediaRoots:prepare-output-directory",
 
   Tool_JellyfinActorPhotoSync = "tool:jellyfin-actor-photo-sync",
   Tool_JellyfinActorInfoSync = "tool:jellyfin-actor-info-sync",

@@ -1,12 +1,14 @@
 import type { Configuration } from "@mdcz/shared/config";
 import type { Website } from "@mdcz/shared/enums";
 import type {
+  ApiKeyDto,
+  IntegrationStatusResponse,
   NetworkCheckCookiesResponse,
   SiteConnectivityProbeResponse,
   TranslateTestInputDto,
   TranslateTestResponse,
 } from "@mdcz/shared/serverDtos";
-import type { NamingPreviewItem } from "@mdcz/shared/types";
+import type { SiteHealth } from "@mdcz/shared/siteResults";
 import { createContext, type ReactNode, useContext, useSyncExternalStore } from "react";
 import type { PathAutocompleteResult } from "../path";
 
@@ -30,6 +32,7 @@ export interface SettingsCrawlerSiteInfo {
   name: string;
   enabled: boolean;
   native: boolean;
+  health?: SiteHealth;
 }
 
 export interface SettingsWatermarkDirectoryInfo {
@@ -46,9 +49,23 @@ export interface SettingsWatermarkDirectoryOpenResult {
 
 export type SettingsTranslateTestInput = TranslateTestInputDto;
 
+/** Server only: API keys that downloaders and cloud drives use to reach the automation endpoints. */
+export interface SettingsIntegrationServices {
+  /** The origin downloaders reach this server at, as the browser sees it. */
+  origin: string;
+  listApiKeys: () => Promise<ApiKeyDto[]>;
+  /** Returns the new key's secret, shown once. */
+  createApiKey: (name: string) => Promise<string>;
+  revokeApiKey: (id: string) => Promise<void>;
+  /** Sends a message through each enabled channel using the settings as edited, saved or not. */
+  testNotification: (settings: Configuration["notifications"]) => Promise<void>;
+  status: () => Promise<IntegrationStatusResponse>;
+}
+
 export interface SettingsServices {
   browsePath: (kind: "file" | "directory", filters?: SettingsBrowseFilter[]) => Promise<SettingsBrowseResult>;
   getPathSuggestions?: (kind: "file" | "directory") => SettingsPathSuggestion[];
+  integrations?: SettingsIntegrationServices;
   isServer?: boolean;
   settingsTarget?: "desktop" | "server";
   suggestDirectoryPath?: (path: string) => Promise<PathAutocompleteResult>;
@@ -61,7 +78,6 @@ export interface SettingsServices {
   decrementInFlightSaves: () => void;
   listCrawlerSites: () => Promise<{ sites: SettingsCrawlerSiteInfo[] }>;
   openWatermarkDirectory: () => Promise<SettingsWatermarkDirectoryOpenResult | undefined>;
-  previewNaming: (config?: Partial<Configuration>) => Promise<{ items: NamingPreviewItem[] }>;
   probeSiteConnectivity: (site: Website) => Promise<SiteConnectivityProbeResponse>;
   relaunchApp: () => Promise<void>;
   resetConfig: (path?: string) => Promise<unknown>;

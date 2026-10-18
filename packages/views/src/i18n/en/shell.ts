@@ -3,7 +3,9 @@ export const shell = {
     overview: "Overview",
     workbench: "Workbench",
     tools: "Tools",
-    library: "Library",
+    library: "Movies",
+    libraries: "Libraries",
+    pending: "Pending",
     settings: "Settings",
     logs: "Logs",
     about: "About",
@@ -13,5 +15,7 @@ export const shell = {
   themeSystem: "Follow system",
   expandSidebar: "Expand sidebar",
   collapseSidebar: "Collapse sidebar",
+  openMenu: "Open navigation",
+  closeMenu: "Close navigation",
   switchLanguage: "切换到中文",
 };

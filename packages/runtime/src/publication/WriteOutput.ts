@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
-import { outputFileSystem } from "./outputFileSystem";
+import { CreatedDirectories, outputFileSystem } from "./outputFileSystem";
 import type { PublicationFileSystem } from "./types";
 
 export type WriteArtifact = { targetPath: string; removeSourcesAfterCommit?: readonly string[] } & (
   | { data: Buffer | string }
   | { sourcePath: string; size: number; consume?: boolean }
+  | { symlinkTo: string }
 );
 
 export class WriteOutput {
@@ -22,10 +23,16 @@ export class WriteOutput {
       beforeCommit?(): Promise<void> | void;
       commit(): TResult | Promise<TResult>;
       protectedMediaFiles?: readonly string[];
+      /** The caller's, which then takes back the empty folders itself once it has restored what else it moved. */
+      directories?: CreatedDirectories;
     },
   ): Promise<TResult> {
-    const staged: Array<{ targetPath: string; temporaryPath: string; size: number }> = [];
+    const directories = options.directories ?? new CreatedDirectories(this.fileSystem);
+    const staged: Array<{ targetPath: string; temporaryPath: string; size?: number }> = [];
+    const replacements: Array<{ targetPath: string; backupPath?: string; linkedBackup?: boolean; installed: boolean }> =
+      [];
     const temporaryPaths = new Set<string>();
+    let committed = false;
     const stagingId = randomUUID();
     const pathKey = (value: string) =>
       process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value);
@@ -48,7 +55,9 @@ export class WriteOutput {
     }
     try {
       for (const artifact of artifacts) {
-        await this.fileSystem.mkdir(path.dirname(artifact.targetPath), { recursive: true });
+        // Already in place, e.g. carried along when its movie folder was renamed.
+        if ("sourcePath" in artifact && pathKey(artifact.sourcePath) === pathKey(artifact.targetPath)) continue;
+        await directories.make(path.dirname(artifact.targetPath));
         const consuming = "sourcePath" in artifact && consumedSources.get(pathKey(artifact.sourcePath)) === artifact;
         const temporaryPath =
           "sourcePath" in artifact && consuming
@@ -57,6 +66,11 @@ export class WriteOutput {
         if (consuming && !(await this.fileSystem.lstat(temporaryPath)).isFile())
           throw new Error(`Consumed staging must be a regular file: ${temporaryPath}`);
         temporaryPaths.add(temporaryPath);
+        if ("symlinkTo" in artifact) {
+          await this.fileSystem.symlink(artifact.symlinkTo, temporaryPath);
+          staged.push({ targetPath: artifact.targetPath, temporaryPath });
+          continue;
+        }
         const expectedSize =
           "data" in artifact
             ? typeof artifact.data === "string"
@@ -79,18 +93,36 @@ export class WriteOutput {
       await options.validate?.();
       await options.beforeCommit?.();
       for (const artifact of staged) {
+        let existingTarget: Awaited<ReturnType<PublicationFileSystem["lstat"]>> | undefined;
         try {
           const existing = await this.fileSystem.lstat(artifact.targetPath);
           if (!existing.isFile() && !existing.isSymbolicLink())
             throw new Error(`Artifact target is not a file: ${artifact.targetPath}`);
+          existingTarget = existing;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
+        const replacement: (typeof replacements)[number] = { targetPath: artifact.targetPath, installed: false };
+        if (existingTarget) {
+          // A hard link keeps the target in place until the atomic replace, so a stop never leaves it missing;
+          // symlinks and filesystems without links fall back to moving the original aside.
+          const backupPath = `${artifact.targetPath}.mdcz-backup-${stagingId}`;
+          try {
+            // link(2) may follow a symlink on some platforms, which would back up the wrong file.
+            if (!existingTarget.isFile()) throw new Error("Only regular files are linked");
+            await this.fileSystem.link(artifact.targetPath, backupPath);
+            replacement.linkedBackup = true;
+          } catch {
+            await this.fileSystem.rename(artifact.targetPath, backupPath);
+          }
+          replacement.backupPath = backupPath;
+        }
+        replacements.push(replacement);
         try {
           await this.fileSystem.rename(artifact.temporaryPath, artifact.targetPath);
           temporaryPaths.delete(artifact.temporaryPath);
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+          if ((error as NodeJS.ErrnoException).code !== "EXDEV" || artifact.size === undefined) throw error;
           const localStaging = `${artifact.targetPath}.mdcz-staging-${stagingId}.part`;
           temporaryPaths.add(localStaging);
           await this.fileSystem.copyFile(artifact.temporaryPath, localStaging);
@@ -100,15 +132,17 @@ export class WriteOutput {
           await this.fileSystem.rename(localStaging, artifact.targetPath);
           temporaryPaths.delete(localStaging);
         }
+        replacement.installed = true;
       }
       const value = await options.commit();
-      const installedTargets = new Set(staged.map((artifact) => pathKey(artifact.targetPath)));
+      committed = true;
+      for (const replacement of replacements) {
+        if (replacement.backupPath) temporaryPaths.add(replacement.backupPath);
+      }
       const obsoleteSources = new Set(
         artifacts
           .flatMap((artifact) => artifact.removeSourcesAfterCommit ?? [])
-          .filter(
-            (sourcePath) => !installedTargets.has(pathKey(sourcePath)) && !protectedMedia.has(pathKey(sourcePath)),
-          ),
+          .filter((sourcePath) => !targets.has(pathKey(sourcePath)) && !protectedMedia.has(pathKey(sourcePath))),
       );
       for (const sourcePath of obsoleteSources) {
         try {
@@ -118,14 +152,32 @@ export class WriteOutput {
         }
       }
       return value;
+    } catch (error) {
+      if (!committed) {
+        for (const replacement of replacements.toReversed()) {
+          const { backupPath, targetPath } = replacement;
+          try {
+            if (backupPath && (replacement.installed || !replacement.linkedBackup))
+              await this.fileSystem.rename(backupPath, targetPath);
+            else if (backupPath) temporaryPaths.add(backupPath);
+            else if (replacement.installed) await this.fileSystem.rm(targetPath, { force: true });
+          } catch (restoreError) {
+            this.logger.warn(
+              `Failed to restore artifact ${targetPath}${backupPath ? ` from ${backupPath}` : ""}: ${toErrorMessage(restoreError)}`,
+            );
+          }
+        }
+      }
+      throw error;
     } finally {
       for (const temporaryPath of temporaryPaths) {
         try {
           await this.fileSystem.rm(temporaryPath, { force: true });
         } catch (error) {
-          this.logger.warn(`Failed to remove publication staging ${temporaryPath}: ${toErrorMessage(error)}`);
+          this.logger.warn(`Failed to remove publication temporary file ${temporaryPath}: ${toErrorMessage(error)}`);
         }
       }
+      if (!committed && !options.directories) await directories.removeEmpty((message) => this.logger.warn(message));
     }
   }
 }

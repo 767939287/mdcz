@@ -2,10 +2,14 @@ import type { LibraryEntryRecord } from "@mdcz/persistence";
 import {
   createRecentAcquisitionsFromEntries,
   LibraryAvailabilityChecker,
+  type MediaLibraryService,
   parseLibraryCrawlerData,
+  RECENT_ACQUISITION_LIMIT,
   relinkLibraryFile,
   toLibraryEntryDto,
+  toLibraryEntryFilter,
 } from "@mdcz/runtime/library";
+import type { Configuration } from "@mdcz/shared/config";
 import { libraryAvailability } from "@mdcz/shared/libraryAvailability";
 import { decodeLibraryPageCursor, encodeLibraryPageCursor } from "@mdcz/shared/libraryPagination";
 import type {
@@ -15,6 +19,8 @@ import type {
   LibraryEntryDto,
   LibraryListInput,
   LibraryListResponse,
+  LibrarySummaryInput,
+  LibrarySummaryResponse,
   MediaRootDto,
   OverviewSummaryResponse,
 } from "@mdcz/shared/serverDtos";
@@ -28,10 +34,19 @@ export class LibraryService {
   constructor(
     private readonly persistence: ServerPersistenceService,
     private readonly mediaRoots: MediaRootService,
+    private readonly libraries: MediaLibraryService,
+    private readonly getConfiguration: () => Promise<Configuration>,
   ) {}
 
   async list(input: LibraryListInput = {}): Promise<LibraryListResponse> {
     return await this.listDtos(input);
+  }
+
+  async summary(input: LibrarySummaryInput): Promise<LibrarySummaryResponse> {
+    const state = await this.persistence.getState();
+    return state.repositories.library.summary(
+      await toLibraryEntryFilter(input, this.libraries, await this.getConfiguration()),
+    );
   }
 
   async removeFile(input: { fileId: string }): Promise<{ success: true }> {
@@ -116,33 +131,13 @@ export class LibraryService {
 
   async overview(): Promise<OverviewSummaryResponse> {
     const state = await this.persistence.getState();
-    const [latestRun, roots, summary] = await Promise.all([
-      state.repositories.scrapeRuns.getLatestFinalized(),
+    const [roots, summary] = await Promise.all([
       this.mediaRoots.list(),
-      state.repositories.library.getOverviewSummary(8),
+      state.repositories.library.getOverviewSummary(RECENT_ACQUISITION_LIMIT),
     ]);
-    const latestOutput = latestRun ? state.repositories.scrapeRuns.summary(latestRun) : null;
     const rootMap = new Map(roots.roots.map((root) => [root.id, root]));
     const entries = summary.recentEntries.filter((entry) => rootMap.has(entry.rootId));
-    const recent = createRecentAcquisitionsFromEntries(entries, 8);
-    const latestEntryTimestamp = summary.latestEntryTimestamp
-      ? summary.latestEntryTimestamp instanceof Date
-        ? summary.latestEntryTimestamp
-        : new Date(Number(summary.latestEntryTimestamp))
-      : null;
-    const output = latestOutput
-      ? {
-          fileCount: latestOutput.successCount,
-          totalBytes: latestOutput.totalBytes,
-          outputAt: latestOutput.completedAt.toISOString(),
-          rootPath: latestOutput.outputRootId ? (rootMap.get(latestOutput.outputRootId)?.hostPath ?? null) : null,
-        }
-      : {
-          fileCount: summary.fileCount,
-          totalBytes: summary.totalBytes,
-          outputAt: latestEntryTimestamp?.toISOString() ?? null,
-          rootPath: null,
-        };
+    const recent = createRecentAcquisitionsFromEntries(entries);
     const recentAcquisitions = await Promise.all(
       recent.map(async (entry) => {
         const record = entries.find((candidate) => candidate.id === entry.id);
@@ -163,27 +158,22 @@ export class LibraryService {
     );
 
     return {
-      output: {
-        fileCount: output.fileCount,
-        totalBytes: output.totalBytes,
-        outputAt: output.outputAt,
-        rootPath: output.rootPath,
-      },
+      output: { fileCount: summary.fileCount, totalBytes: summary.totalBytes },
       recentAcquisitions,
     };
   }
 
   private async listDtos(input: LibraryListInput = {}): Promise<LibraryListResponse> {
     const state = await this.persistence.getState();
-    const [rootMap, page] = await Promise.all([
+    const [rootMap, filter] = await Promise.all([
       this.loadRootMap(),
-      state.repositories.library.listEntriesPage({
-        cursor: decodeLibraryPageCursor(input?.cursor),
-        limit: input?.limit ?? 100,
-        query: input?.query,
-        rootId: input?.rootId,
-      }),
+      toLibraryEntryFilter(input, this.libraries, await this.getConfiguration()),
     ]);
+    const page = await state.repositories.library.listEntriesPage({
+      ...filter,
+      cursor: decodeLibraryPageCursor(input?.cursor),
+      limit: input?.limit ?? 100,
+    });
 
     return {
       entries: await Promise.all(

@@ -1,12 +1,14 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { MediaRoot } from "@mdcz/media-store";
 import { resolveRootRelativePath, toRootRelativePath } from "@mdcz/media-store";
 import type { LibraryEntryRecord } from "@mdcz/persistence";
 import { isMovieNfoBaseName } from "@mdcz/shared/assetNaming";
 import type { Configuration, DeepPartial } from "@mdcz/shared/config";
+import type { Website } from "@mdcz/shared/enums";
 import { toErrorMessage } from "@mdcz/shared/error";
 import type { MaintenanceMovieGroup } from "@mdcz/shared/maintenanceTasks";
+import type { PublicationTarget } from "@mdcz/shared/mediaLibrary";
 import type {
   CrawlerData,
   DiscoveredAssets,
@@ -20,8 +22,8 @@ import type {
   NfoLocalState,
   PathDiff,
 } from "@mdcz/shared/types";
-import type { RuntimeCrawlerProvider } from "../crawler/types";
 import { registeredMediaLocations } from "../library/registeredMedia";
+import { runWithScrapeItem } from "../network";
 import { resolvePublicationAssetLayout } from "../publication/assetLayout";
 import type { CommittedMovie } from "../publication/committedMovie";
 import { toCommittedMovie } from "../publication/committedMovie";
@@ -49,11 +51,14 @@ import {
   writePreparedNfo,
 } from "../scrape";
 import type { RuntimeActorImageService, RuntimeActorSourceProvider } from "../scrape/actorOutput";
-import { AggregationService } from "../scrape/aggregation";
+import { AggregationService, type CrawlerPort, mergeSiteData, type SiteResultSink } from "../scrape/aggregation";
 import { canonicalizeCrawlerDataActorAliases } from "../scrape/canonicalizeActorAliases";
 import { DirectoryInventory } from "../scrape/DirectoryInventory";
+import { editedKeys } from "../scrape/nfoEdits";
 import { assignVersionLabels } from "../scrape/organize/versionLabels";
 import { prepareOnlineMetadata } from "../scrape/prepareOnlineMetadata";
+import { publishMetadata } from "../scrape/publishMetadata";
+import type { PrepareScrapeItem } from "../scrape/ScrapeRunner";
 import { isAbortError, throwIfAborted } from "../scrape/utils/abort";
 import { type RuntimeLogger, runtimeLoggerService } from "../shared";
 import { partitionCrawlerDataWithOptions } from "./diffCrawlerData";
@@ -75,8 +80,13 @@ export interface MaintenanceRuntimeDependencies {
   actorImageService: RuntimeActorImageService;
   actorSourceProvider?: RuntimeActorSourceProvider;
   aggregationService?: Pick<AggregationService, "aggregate">;
-  crawlerProvider?: RuntimeCrawlerProvider;
+  crawlerProvider?: CrawlerPort;
+  recordSiteResults?: SiteResultSink;
+  /** The stored per-site rows for a number; `data` is the site's answer in its source language. */
+  loadSiteResults?: (number: string) => Promise<ReadonlyArray<{ site: string; data?: unknown; sourceUrl?: string }>>;
   logger?: RuntimeLogger;
+  /** Development record/replay names the recording an online refresh belongs to. */
+  prepareScrapeItem?: PrepareScrapeItem;
   config: MaintenanceRuntimeConfigProvider;
   downloadManager?: DownloadManager;
   fileOrganizer: Pick<FileOrganizer, "plan" | "resolveOutputPlan">;
@@ -141,7 +151,6 @@ export interface MaintenanceRuntimeApplyEntryInput {
     identity: Pick<MaintenanceMovieGroup, "movieId" | "assets">;
   };
   signal?: AbortSignal;
-  preserveRegisteredMetadata?: boolean;
 }
 
 export interface MaintenanceRuntimeApplyLibraryEntryInput
@@ -149,7 +158,17 @@ export interface MaintenanceRuntimeApplyLibraryEntryInput
   root: MediaRoot;
   entry: LibraryEntryRecord;
   localState?: NfoLocalState;
+  /** Where moving presets organize the movie. */
+  target?: PublicationTarget;
 }
+
+/** Writing presets keep files and metadata where they are; only the default NFO name comes from this. */
+const IN_PLACE_TARGET: PublicationTarget = {
+  placement: "inPlace",
+  outputPath: "",
+  folderTemplate: "",
+  fileTemplate: "",
+};
 
 export interface MaintenanceRuntimeApplySuccess {
   status: "success";
@@ -190,8 +209,7 @@ export class MaintenanceRuntime {
 
   constructor(
     private readonly deps: MaintenanceRuntimeDependencies,
-    private readonly sourceMediaPath?: string,
-    private readonly outputTemplateRoot?: string,
+    private readonly target?: PublicationTarget,
     readonly inventory = new DirectoryInventory(),
   ) {}
 
@@ -203,15 +221,10 @@ export class MaintenanceRuntime {
     inventory: DirectoryInventory;
     configuration?: Configuration;
     root: MediaRoot;
-    outputRoot: MediaRoot;
-    outputRelativeDirectory: string;
+    target?: PublicationTarget;
     signal?: AbortSignal;
   }): Promise<MaintenanceRuntime> {
     const config = structuredClone(input.configuration ?? (await this.getConfiguration()));
-    const sourceMediaPath = config.paths.mediaPath.trim() || input.root.hostPath;
-    const outputBaseDirectory = input.outputRelativeDirectory
-      ? resolveRootRelativePath(input.outputRoot, input.outputRelativeDirectory)
-      : input.outputRoot.hostPath;
     return new MaintenanceRuntime(
       {
         ...this.deps,
@@ -222,12 +235,12 @@ export class MaintenanceRuntime {
                 config,
                 logger: this.deps.logger,
                 signal: input.signal,
+                recordSiteResults: this.deps.recordSiteResults,
               })
             : undefined),
         config: { get: async () => config },
       },
-      sourceMediaPath,
-      outputBaseDirectory,
+      input.target,
       input.inventory,
     );
   }
@@ -241,15 +254,14 @@ export class MaintenanceRuntime {
     root: MediaRoot;
     refs: Array<{ relativePath: string }>;
     signal?: AbortSignal;
-    registeredOutputs?: Map<string, { nfoPath?: string }>;
+    registeredOutputs?: Map<string, { nfoPaths: string[] }>;
   }): Promise<LocalScanEntry[]> {
     const config = await this.getPresetConfig("import_local");
     const filePaths = input.refs.map((ref) => resolveRootRelativePath(input.root, ref.relativePath));
     return await this.localScanService.scanFiles(input.root, filePaths, config.paths.sceneImagesFolder, input.signal, {
-      mediaPath: this.sourceMediaPath ?? config.paths.mediaPath,
-      metadataPath: "",
       registeredOutputs: input.registeredOutputs,
       inventory: this.inventory,
+      filenameRules: config.scrape,
     });
   }
 
@@ -266,31 +278,82 @@ export class MaintenanceRuntime {
 
       let crawlerData: CrawlerData | undefined;
       let imageAlternatives: MaintenanceImageAlternatives = {};
+      const published = { crawlerData: entry.crawlerData, localState: entry.nfoLocalState };
+      const { translateService } = this.deps;
       if (preset.dataSource === "online") {
-        if (!this.deps.aggregationService || !this.deps.translateService) {
+        if (!this.deps.aggregationService || !translateService) {
           throw new Error("Online preset lacks required aggregation or translation services");
         }
-        const prepared = await prepareOnlineMetadata({
-          number: entry.fileInfo.number,
-          configuration: config,
-          aggregationService: this.deps.aggregationService,
-          translateService: this.deps.translateService,
-          signal,
-        });
+        // A manual-URL fix pinned its detail page; refreshing by number would undo it.
+        const pin = entry.nfoLocalState?.sourcePin;
+        const caseId = this.deps.prepareScrapeItem?.({
+          fileInfo: entry.fileInfo,
+          caseId: undefined as string | undefined,
+        }).caseId;
+        const { aggregationService } = this.deps;
+        const prepared = await runWithScrapeItem(
+          { caseId, execution: {} },
+          async () =>
+            await prepareOnlineMetadata({
+              number: entry.fileInfo.number,
+              configuration: config,
+              aggregationService,
+              translateService,
+              published,
+              keepEdits: false,
+              manualScrape: pin ? { site: pin.site, detailUrl: pin.url } : undefined,
+              signal,
+            }),
+        );
         crawlerData = prepared.crawlerData;
         imageAlternatives = prepared.aggregation.imageAlternatives;
+      } else if (preset.dataSource === "stored") {
+        if (!this.deps.loadSiteResults || !translateService) {
+          throw new Error("Stored preset lacks site result storage or translation services");
+        }
+        // A pinned movie re-merges only what its pinned page returned; a number search may describe another work.
+        const pin = entry.nfoLocalState?.sourcePin;
+        const siteData = new Map(
+          (await this.deps.loadSiteResults(entry.fileInfo.number)).flatMap(({ site, data, sourceUrl }) =>
+            data && (!pin || (site === pin.site && sourceUrl === pin.url))
+              ? [[site as Website, data as CrawlerData] as const]
+              : [],
+          ),
+        );
+        if (siteData.size === 0) {
+          throw new Error(
+            pin
+              ? `No stored result from the pinned page ${pin.url}; refresh it online`
+              : `No stored site results for ${entry.fileInfo.number}`,
+          );
+        }
+        const merged = mergeSiteData(siteData, config);
+        imageAlternatives = merged.imageAlternatives;
+        const publication = await publishMetadata({
+          // Actor photos are output, not site data; re-merging must not fetch them again.
+          data: { ...merged.data, actor_profiles: entry.crawlerData?.actor_profiles },
+          published,
+          keepEdits: false,
+          keepPublishedGenres: true,
+          configuration: config,
+          translateService,
+          signal,
+        });
+        crawlerData = publication.data;
       } else {
-        crawlerData = entry.crawlerData;
-        if (crawlerData) crawlerData = canonicalizeCrawlerDataActorAliases(crawlerData, config);
+        crawlerData = entry.crawlerData && canonicalizeCrawlerDataActorAliases(entry.crawlerData, config);
+        if (!crawlerData && preset.output === "none") {
+          crawlerData = {
+            title: entry.fileInfo.fileName,
+            number: entry.fileInfo.number,
+            actors: [],
+            genres: [],
+            scene_images: [],
+          };
+        }
       }
 
-      const { fieldDiffs, unchangedFieldDiffs } = this.partitionDiffs(
-        entry,
-        config,
-        preset,
-        crawlerData,
-        imageAlternatives,
-      );
+      const { fieldDiffs, unchangedFieldDiffs } = this.partitionDiffs(entry, preset, crawlerData, imageAlternatives);
 
       const { pathDiff, affectedFiles } = await this.previewPaths({
         presetId: input.presetId,
@@ -360,11 +423,11 @@ export class MaintenanceRuntime {
       return root;
     };
     const locations = await registeredMediaLocations(libraryEntry, resolveRoot);
+    // Each confirmation rewrites the files it touches, so no later action may reuse this one's observations.
     const runtime = await this.createSession({
-      inventory: this.inventory,
+      inventory: new DirectoryInventory(),
       root: input.root,
-      outputRoot: input.root,
-      outputRelativeDirectory: "",
+      target: input.target,
       signal: input.signal,
     });
     const files: LocalScanEntry[] = [];
@@ -404,7 +467,7 @@ export class MaintenanceRuntime {
     const crawlerData = committed?.crawlerData ?? entry.crawlerData;
     if (!crawlerData) throw new Error("Maintenance output requires movie metadata");
 
-    const plans = await this.buildPlans(files, config, preset, crawlerData, signal, input.preserveRegisteredMetadata);
+    const plans = await this.buildPlans(files, config, preset, crawlerData, signal);
     const sharedPlan = plans[this.memberIndex(files, entry)];
     const members = await Promise.all(
       files.map(async (file, index) => {
@@ -535,7 +598,7 @@ export class MaintenanceRuntime {
                 assets,
                 config,
                 crawlerData: preparedCrawlerData,
-                enabled: Boolean((preset.dataSource === "online" || config.download.generateNfo) && sharedPlan.plan),
+                enabled: Boolean((preset.dataSource !== "local" || config.download.generateNfo) && sharedPlan.plan),
                 fileInfo: entry.fileInfo,
                 localState: entry.nfoLocalState,
                 buildTags: buildMovieTags,
@@ -667,10 +730,9 @@ export class MaintenanceRuntime {
     preset: MaintenancePreset,
     crawlerData: CrawlerData | undefined,
     signal?: AbortSignal,
-    preserveRegisteredMetadata = false,
   ): Promise<Array<{ plan?: ResolvedPublicationLayout; pathDiff?: PathDiff }>> {
     const labels =
-      preset.output === "move" && crawlerData && config.behavior.successFileRename
+      preset.output === "move" && crawlerData
         ? assignVersionLabels(
             await Promise.all(
               files.map(async (file) => ({
@@ -684,19 +746,21 @@ export class MaintenanceRuntime {
           )
         : [];
     return await Promise.all(
-      files.map((file, index) =>
-        this.buildPlan(file, config, preset, crawlerData, signal, preserveRegisteredMetadata, labels[index]),
-      ),
+      files.map((file, index) => this.buildPlan(file, config, preset, crawlerData, signal, labels[index])),
     );
   }
 
+  // Organizing moves files already in the library, whatever transfer first placed them there.
   private planMove(entry: LocalScanEntry, config: Configuration, crawlerData: CrawlerData, versionLabel?: string) {
-    return this.deps.fileOrganizer.plan(entry.fileInfo, crawlerData, config, entry.nfoLocalState, {
-      outputTemplateRoot:
-        this.outputTemplateRoot ??
-        resolve(config.paths.mediaPath || entry.currentDir, config.paths.successOutputFolder),
-      versionLabel,
-    });
+    if (!this.target) throw new Error("Organizing needs a library to organize into");
+    return this.deps.fileOrganizer.plan(
+      entry.fileInfo,
+      crawlerData,
+      config,
+      { ...this.target, placement: "move" },
+      entry.nfoLocalState,
+      { versionLabel },
+    );
   }
 
   private async buildPlan(
@@ -705,7 +769,6 @@ export class MaintenanceRuntime {
     preset: MaintenancePreset,
     crawlerData: CrawlerData | undefined,
     signal?: AbortSignal,
-    preserveRegisteredMetadata = false,
     versionLabel?: string,
   ): Promise<{
     plan?: ResolvedPublicationLayout;
@@ -718,14 +781,19 @@ export class MaintenanceRuntime {
     }
 
     if (preset.output !== "move") {
-      const layout = this.deps.fileOrganizer.plan(entry.fileInfo, crawlerData, config, entry.nfoLocalState);
+      const layout = this.deps.fileOrganizer.plan(
+        entry.fileInfo,
+        crawlerData,
+        config,
+        IN_PLACE_TARGET,
+        entry.nfoLocalState,
+      );
       const metadataDir = entry.nfoPath ? dirname(entry.nfoPath) : layout.metadataDir;
       return {
         plan: await this.deps.fileOrganizer.resolveOutputPlan(
           {
             outputDir: entry.currentDir,
             metadataDir,
-            metadataRoot: metadataDir,
             mode: "preserve",
             targetVideoPath: entry.fileInfo.filePath,
             nfoPath:
@@ -745,18 +813,8 @@ export class MaintenanceRuntime {
       };
     }
 
-    const rawPlan = this.planMove(entry, config, crawlerData, versionLabel);
-
-    const registeredMetadataPath = preserveRegisteredMetadata ? entry.nfoPath : undefined;
-    const metadataDir = registeredMetadataPath ? dirname(registeredMetadataPath) : rawPlan.metadataDir;
     const plan = await this.deps.fileOrganizer.resolveOutputPlan(
-      registeredMetadataPath
-        ? {
-            ...rawPlan,
-            metadataDir,
-            nfoPath: entry.nfoPath ?? join(metadataDir, basename(rawPlan.nfoPath)),
-          }
-        : rawPlan,
+      this.planMove(entry, config, crawlerData, versionLabel),
       entry.fileInfo.filePath,
       {
         allowSharedDirectory:
@@ -774,7 +832,6 @@ export class MaintenanceRuntime {
 
   private partitionDiffs(
     entry: LocalScanEntry,
-    config: Configuration,
     preset: MaintenancePreset,
     crawlerData: CrawlerData | undefined,
     imageAlternatives: MaintenanceImageAlternatives,
@@ -789,9 +846,9 @@ export class MaintenanceRuntime {
     }
 
     return partitionCrawlerDataWithOptions(comparisonBase, crawlerData, {
-      includeTranslatedFields: config.translate.enableTranslation,
       entry,
       imageAlternatives,
+      userEdited: editedKeys(entry.nfoLocalState),
     });
   }
 

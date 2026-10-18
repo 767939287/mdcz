@@ -94,7 +94,7 @@ const mergeGroupedScrapeResult = (existing: ScrapeResult, incoming: ScrapeResult
     nfo: incoming.nfo ?? existing.nfo,
     assets: mergeAssets(existing.assets, incoming.assets),
     sources: incoming.sources ? { ...existing.sources, ...incoming.sources } : existing.sources,
-    uncensoredAmbiguous: incoming.uncensoredAmbiguous ?? existing.uncensoredAmbiguous,
+    pending: incoming.pending ?? existing.pending,
   };
 };
 
@@ -108,7 +108,9 @@ const mergeScrapeResultStatus = (existing: ScrapeResultStatus, incoming: ScrapeR
 
 const getScrapeGroupStatus = (group: ScrapeResultGroup["items"]): RendererGroupStatus => {
   if (group.some((item) => item.status === "failed")) return "failed";
-  if (group.some((item) => item.status === "processing" || item.status === "pending")) return "processing";
+  if (group.some((item) => item.status === "processing")) return "processing";
+  if (group.every((item) => item.status === "pending")) return "queued";
+  if (group.some((item) => item.status === "pending")) return "processing";
   if (group.some((item) => item.status === "success")) return "success";
   return "idle";
 };

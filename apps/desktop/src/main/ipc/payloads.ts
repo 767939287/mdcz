@@ -1,6 +1,6 @@
 import { directorySourceSchema } from "@mdcz/shared/directoryTasks";
 import { Website } from "@mdcz/shared/enums";
-import { localFileTargetSchema, rootFileRefSchema, wireRelativeDirectorySchema } from "@mdcz/shared/mediaRef";
+import { localFileTargetSchema, rootFileRefSchema } from "@mdcz/shared/mediaRef";
 import { normalizedCropRegionSchema } from "@mdcz/shared/posterCrop";
 import {
   configPathInputSchema,
@@ -8,6 +8,7 @@ import {
   libraryAvailabilityInputSchema,
   libraryDetailInputSchema,
   libraryListInputSchema,
+  librarySummaryInputSchema,
   maintenancePresetIdSchema,
   mediaRootEnsurePathInputSchema,
 } from "@mdcz/shared/serverDtos";
@@ -23,9 +24,6 @@ export const appSyncTitleBarThemeInputSchema = z.object({ isDark: z.boolean() })
 
 export const configSaveInputSchema = z.object({ config: z.record(z.string(), z.unknown()).optional() }).optional();
 export const configResetInputSchema = z.object({ path: optionalString }).optional();
-export const configPreviewNamingInputSchema = z
-  .object({ config: z.record(z.string(), z.unknown()).optional() })
-  .optional();
 export const configProfileNameInputSchema = z.object({ name: optionalString });
 export const configImportProfileInputSchema = z.object({
   filePath: optionalString,
@@ -33,21 +31,7 @@ export const configImportProfileInputSchema = z.object({
   overwrite: z.boolean().optional(),
 });
 
-export const scraperStartInputSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("directory"), source: directorySourceSchema, targetDir: z.string().trim().min(1) }),
-  z.object({
-    mode: z.literal("selection"),
-    refs: z.array(rootFileRefSchema).min(1),
-    outputRootId: z.string().trim().min(1),
-    outputRelativeDirectory: wireRelativeDirectorySchema.optional(),
-    manualUrl: z.string().trim().min(1).optional(),
-  }),
-  z.object({
-    mode: z.literal("single"),
-    ref: rootFileRefSchema,
-    manualUrl: z.string().trim().min(1).optional(),
-  }),
-]);
+export { scrapeStartInputSchema as scraperStartInputSchema } from "@mdcz/shared/serverDtos";
 export const scraperStartSinglePathInputSchema = z.object({ path: z.string().trim().min(1) });
 export const scraperGetStatusInputSchema = z.object({ taskId: z.string().trim().min(1).optional() });
 export const scraperRerunDirectoryInputSchema = z.object({ runId: z.string().trim().min(1) });
@@ -97,6 +81,7 @@ export {
   libraryAvailabilityInputSchema,
   libraryDetailInputSchema,
   libraryListInputSchema,
+  librarySummaryInputSchema,
   mediaRootEnsurePathInputSchema,
 };
 
@@ -110,7 +95,13 @@ export const toolAmazonPosterLookupInputSchema = z.object({ nfoPath: optionalStr
 export const toolAmazonPosterApplyInputSchema = z.object({
   items: z.array(z.object({ nfoPath: z.string(), amazonPosterUrl: z.string() })).optional(),
 });
+const batchTranslateModeSchema = z.enum(["untranslated", "all", "restore"]);
+export const toolBatchTranslateScanInputSchema = z.object({
+  directory: optionalString,
+  mode: batchTranslateModeSchema,
+});
 export const toolBatchTranslateApplyInputSchema = z.object({
+  mode: batchTranslateModeSchema,
   items: z
     .array(
       z.object({
@@ -131,14 +122,13 @@ export const maintenanceStartPreviewInputSchema = z.union([
   z.object({ rerunSessionId: z.string().min(1) }),
   z.object({
     source: directorySourceSchema,
-    targetDir: z.string().trim().min(1).optional(),
+    libraryId: z.string().trim().min(1).optional(),
     presetId: maintenancePresetIdSchema,
   }),
   z.object({
     refs: z.array(rootFileRefSchema).optional(),
     presetId: maintenancePresetIdSchema.optional(),
-    outputRootId: z.string().trim().min(1).optional(),
-    outputRelativeDirectory: z.string().optional(),
+    libraryId: z.string().trim().min(1).optional(),
   }),
 ]);
 export const maintenanceApplyInputSchema = z.object({

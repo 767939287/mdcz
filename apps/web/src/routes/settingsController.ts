@@ -46,7 +46,6 @@ export const createSettingsServices = (queryClient: QueryClient): SettingsServic
       unsupported: true,
     };
   },
-  previewNaming: async (config) => await api.config.previewNaming(config ?? {}),
   probeSiteConnectivity: async (site) => await api.crawler.probeSiteConnectivity({ site }),
   relaunchApp: async () => window.location.reload(),
   resetConfig: async (path) => await api.config.reset(path ? { path } : undefined),
@@ -58,6 +57,18 @@ export const createSettingsServices = (queryClient: QueryClient): SettingsServic
       error: result.error,
       entries: result.entries.map((entry) => ({ label: entry.label, path: entry.path })),
     };
+  },
+  integrations: {
+    origin: window.location.origin,
+    listApiKeys: async () => (await api.apiKeys.list()).keys,
+    createApiKey: async (name) => (await api.apiKeys.create({ name })).secret,
+    revokeApiKey: async (id) => {
+      await api.apiKeys.delete({ id });
+    },
+    testNotification: async (settings) => {
+      await api.notifications.test(settings);
+    },
+    status: async () => await api.integrations.status(),
   },
   isServer: true,
   settingsTarget: "server",

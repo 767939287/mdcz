@@ -6,6 +6,7 @@ import { SettingsSectionModeProvider } from "./SettingsSectionModeContext";
 import { useSettingsServices } from "./SettingsServices";
 import { SitePriorityEditorField } from "./SitePriorityEditorField";
 import { Subsection } from "./Subsection";
+import { IntegrationAccessPanel, QbittorrentStatusLine, useIntegrationStatus } from "./sections/IntegrationAccessPanel";
 import { MediaServerSection } from "./sections/MediaServerSections";
 import {
   AggregationBehaviorSection,
@@ -17,7 +18,10 @@ import {
   NetworkConnectionSection,
   NetworkSiteAccessSection,
   NfoSection,
+  NotificationsSection,
+  PathMappingsField,
   PathsSection,
+  QbittorrentSection,
   ScrapePacingSection,
   ShortcutsSection,
   TranslateSection,
@@ -151,6 +155,51 @@ export function MediaServerTopLevelSection({ forceOpen = false }: { forceOpen?: 
       forceOpen={forceOpen}
     >
       <MediaServerSection />
+    </SectionAnchor>
+  );
+}
+
+/** Downloader access, qBittorrent polling and notifications; only the server receives callbacks and sends messages. */
+export function AutomationTopLevelSection({ forceOpen = false }: { forceOpen?: boolean }) {
+  const t = useT();
+  const services = useSettingsServices();
+  const search = useSettingsSearch();
+  const status = useIntegrationStatus(services.integrations);
+  if ((services.settingsTarget ?? (services.isServer ? "server" : "desktop")) !== "server") return null;
+
+  return (
+    <SectionAnchor
+      id="automation"
+      label={t.settingsFields.sections.automation.label}
+      title={t.settingsFields.sections.automation.label}
+      forceOpen={forceOpen}
+    >
+      <Subsection
+        title={t.settings.integrations.access}
+        description={t.settings.integrations.accessDescription}
+        className="mb-6 last:mb-0"
+      >
+        {/* The key panel holds no settings fields, so a search only ever matches the fields around it. */}
+        {services.integrations && !search.hasActiveFilters ? (
+          <IntegrationAccessPanel
+            integrations={services.integrations}
+            cloudDriveLastEventAt={status?.cloudDrive.lastEventAt ?? null}
+          />
+        ) : null}
+        <PathMappingsField />
+      </Subsection>
+      <Subsection
+        title={t.settings.integrations.qbittorrent}
+        description={t.settings.integrations.qbittorrentDescription}
+        className="mb-6 last:mb-0"
+      >
+        <QbittorrentSection
+          status={status && !search.hasActiveFilters ? <QbittorrentStatusLine status={status.qbittorrent} /> : null}
+        />
+      </Subsection>
+      <Subsection title={t.settings.integrations.notifications} className="mb-6 last:mb-0">
+        <NotificationsSection />
+      </Subsection>
     </SectionAnchor>
   );
 }

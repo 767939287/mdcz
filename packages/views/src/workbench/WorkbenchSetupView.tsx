@@ -1,3 +1,4 @@
+import type { MediaLibraryDto } from "@mdcz/shared/mediaLibrary";
 import { maintenancePresetIdSchema } from "@mdcz/shared/serverDtos";
 import type { MaintenancePresetId, MediaCandidate } from "@mdcz/shared/types";
 import {
@@ -12,6 +13,11 @@ import {
   DialogTitle,
   quietFieldSurfaceClass,
   quietPanelSurfaceClass,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@mdcz/ui";
 import { AlertCircle, ArrowDown, Check, FolderOpen, FolderOutput, Loader2, Search, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
@@ -32,7 +38,11 @@ export interface WorkbenchSetupViewProps {
   onRecursiveChange?: (recursive: boolean) => void;
   onCommitScanDir?: () => void;
   warnings?: { count: number; paths: string[] };
-  targetDir?: string;
+  /** Undefined when the task writes back where files are, without a library. */
+  libraries?: MediaLibraryDto[];
+  libraryId?: string;
+  onLibraryChange?: (libraryId: string) => void;
+  onManageLibraries?: () => void;
   candidates: MediaCandidate[];
   selectedPaths: string[];
   selectedSize: number;
@@ -45,12 +55,9 @@ export interface WorkbenchSetupViewProps {
   primaryDisabled: boolean;
   isServer?: boolean;
   onSuggestScanDir?: (path: string) => Promise<PathAutocompleteResult>;
-  onSuggestTargetDir?: (path: string) => Promise<PathAutocompleteResult>;
   formatBytes: (value: number, options?: { trimTrailingZeros?: boolean }) => string;
   onBrowseScanDir: () => void;
-  onBrowseTargetDir?: () => void;
   onScanDirChange?: (value: string) => void;
-  onTargetDirChange?: (value: string) => void;
   refreshDisabled?: boolean;
   onRefreshScan: () => void;
   onPresetChange: (presetId: MaintenancePresetId) => void;
@@ -173,12 +180,14 @@ function MediaRow({
   selected,
   disabled,
   formatBytes,
+  inLibraryLabel,
   onToggle,
 }: {
   candidate: MediaCandidate;
   selected: boolean;
   disabled: boolean;
   formatBytes: (value: number, options?: { trimTrailingZeros?: boolean }) => string;
+  inLibraryLabel: string;
   onToggle: () => void;
 }) {
   const checkboxId = useId();
@@ -197,7 +206,12 @@ function MediaRow({
         onCheckedChange={onToggle}
       />
       <div className="min-w-0 space-y-0.5">
-        <div className="truncate text-sm font-bold leading-5 tracking-tight text-foreground">{candidate.name}</div>
+        <div className="truncate text-sm font-bold leading-5 tracking-tight text-foreground">
+          {candidate.name}
+          {candidate.inLibrary ? (
+            <span className="ml-2 text-[10px] font-normal text-muted-foreground">{inLibraryLabel}</span>
+          ) : null}
+        </div>
         {candidate.ref.relativePath.includes("/") ? (
           <div className="truncate font-mono text-[10px]/4 text-muted-foreground">
             {candidate.ref.relativePath.slice(0, candidate.ref.relativePath.lastIndexOf("/"))}
@@ -207,6 +221,73 @@ function MediaRow({
       <div className={cn(MEDIA_ROW_META_CLASS, "font-bold uppercase")}>{candidate.extension.replace(/^\./u, "")}</div>
       <div className={MEDIA_ROW_META_CLASS}>{formatBytes(candidate.size, { trimTrailingZeros: true })}</div>
     </label>
+  );
+}
+
+function LibraryControl({
+  libraries,
+  libraryId,
+  disabled,
+  onChange,
+  onManage,
+}: {
+  libraries: MediaLibraryDto[];
+  libraryId?: string;
+  disabled: boolean;
+  onChange?: (libraryId: string) => void;
+  onManage?: () => void;
+}) {
+  const t = useT();
+  const selectId = useId();
+  const library = libraries.find((candidate) => candidate.id === libraryId);
+  const manage = onManage ? (
+    <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={onManage}>
+      {t.workbench.manageLibraries}
+    </Button>
+  ) : null;
+
+  if (libraries.length === 0) {
+    return (
+      <div className="space-y-2.5">
+        <div className="text-sm font-semibold tracking-tight text-foreground">{t.workbench.libraryLabel}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-quiet border border-dashed border-border/70 px-4 py-3 text-sm text-muted-foreground">
+          <span>{t.workbench.noLibraries}</span>
+          {onManage ? (
+            <Button type="button" size="sm" onClick={onManage}>
+              {t.workbench.createLibrary}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0 space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label htmlFor={selectId} className="text-sm font-semibold tracking-tight text-foreground">
+          {t.workbench.libraryLabel}
+        </label>
+        {manage}
+      </div>
+      <Select value={libraryId ?? ""} onValueChange={(value) => onChange?.(value)} disabled={disabled}>
+        <SelectTrigger id={selectId} className="w-full">
+          <SelectValue placeholder={t.workbench.libraryPlaceholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {libraries.map((candidate) => (
+            <SelectItem key={candidate.id} value={candidate.id}>
+              {candidate.name} · {t.libraries.placements[candidate.placement].label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {library ? (
+        <div className="truncate pl-1 font-mono text-[11px] text-muted-foreground" title={library.outputPath}>
+          {library.outputPath || t.libraries.card.noOutput}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -221,7 +302,10 @@ export function WorkbenchSetupView({
   onRecursiveChange,
   onCommitScanDir,
   warnings,
-  targetDir,
+  libraries,
+  libraryId,
+  onLibraryChange,
+  onManageLibraries,
   candidates,
   selectedPaths,
   selectedSize,
@@ -234,12 +318,9 @@ export function WorkbenchSetupView({
   primaryDisabled,
   isServer = false,
   onSuggestScanDir,
-  onSuggestTargetDir,
   formatBytes,
   onBrowseScanDir,
-  onBrowseTargetDir,
   onScanDirChange,
-  onTargetDirChange,
   refreshDisabled = false,
   onRefreshScan,
   onPresetChange,
@@ -255,6 +336,7 @@ export function WorkbenchSetupView({
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmingStart, setConfirmingStart] = useState(false);
   const startsWholeDirectory = mode === "scrape" && !previewMode;
+  const library = libraries?.find((candidate) => candidate.id === libraryId);
 
   useEffect(() => {
     if (!previewMode || !onExitPreview || startPending) return;
@@ -445,21 +527,18 @@ export function WorkbenchSetupView({
                   onCommit={onCommitScanDir}
                   loadSuggestions={onSuggestScanDir}
                 />
-                {targetDir !== undefined ? (
+                {libraries !== undefined ? (
                   <div>
                     <div className="mb-4 flex h-7 items-center pl-6" aria-hidden="true">
                       <span className="h-full border-l border-dashed border-border" />
                       <ArrowDown className="-ml-2 mt-6 h-4 w-4 rounded-full bg-surface text-muted-foreground" />
                     </div>
-                    <PathControl
-                      label={t.workbench.outputDirLabel}
+                    <LibraryControl
+                      libraries={libraries}
+                      libraryId={libraryId}
                       disabled={startPending}
-                      icon={<FolderOutput className="h-5 w-5" />}
-                      value={targetDir}
-                      placeholder={configLoading ? t.workbench.loadingConfig : t.workbench.outputDirPlaceholder}
-                      onBrowse={isServer ? undefined : onBrowseTargetDir}
-                      onChange={onTargetDirChange}
-                      loadSuggestions={onSuggestTargetDir}
+                      onChange={onLibraryChange}
+                      onManage={onManageLibraries}
                     />
                   </div>
                 ) : null}
@@ -484,7 +563,7 @@ export function WorkbenchSetupView({
                   </div>
                 </div>
 
-                {targetDir !== undefined ? (
+                {library ? (
                   <>
                     <div className="flex items-center gap-2 py-0.5">
                       <div className="h-px flex-1 bg-border/60" />
@@ -494,13 +573,14 @@ export function WorkbenchSetupView({
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground">
                         <FolderOutput className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span>{t.workbench.outputDirLabel}</span>
+                        <span>{t.workbench.libraryLabel}</span>
                       </div>
-                      <div className="truncate text-xs font-bold text-foreground" title={targetDir}>
-                        {getDirBasename(targetDir)}
-                      </div>
-                      <div className="truncate font-mono text-[10px] text-muted-foreground/75" title={targetDir}>
-                        {targetDir}
+                      <div className="truncate text-xs font-bold text-foreground">{library.name}</div>
+                      <div
+                        className="truncate font-mono text-[10px] text-muted-foreground/75"
+                        title={library.outputPath}
+                      >
+                        {library.outputPath || t.libraries.card.noOutput}
                       </div>
                     </div>
                   </>
@@ -657,6 +737,7 @@ export function WorkbenchSetupView({
                       selected={selectedPathSet.has(candidate.path)}
                       disabled={startPending || scanning}
                       formatBytes={formatBytes}
+                      inLibraryLabel={t.workbench.alreadyInLibrary}
                       onToggle={() => onToggleCandidate(candidate.path)}
                     />
                   ))}
