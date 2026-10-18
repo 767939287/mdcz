@@ -442,8 +442,9 @@ export const checkEmbyConnection = async (
         headers: buildEmbyHeaders(configuration, { accept: "application/json" }),
       });
     },
+    // Reads people exactly as the sync does, so a server whose actor filter comes back empty fails here, not silently in sync.
     fetchPersons: async () =>
-      await fetchEmbyPersons(networkClient, configuration, {
+      await fetchEmbyActorPersons(networkClient, configuration, {
         limit: 1,
         fields: ["Overview"],
         userId: await getResolvedUserId(),

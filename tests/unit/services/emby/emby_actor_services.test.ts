@@ -214,7 +214,7 @@ describe("Emby actor services", () => {
     ]);
   });
 
-  it("uses the resolved Emby user id for people-read diagnostics", async () => {
+  it("reads people for diagnostics exactly as the sync does: resolved user id and actor filter", async () => {
     const networkClient = new FakeNetworkClient();
     networkClient.getJson.mockImplementation(
       createMockGetJson({
@@ -238,7 +238,11 @@ describe("Emby actor services", () => {
     expect(
       networkClient.getJson.mock.calls.some(([url]) => {
         const parsed = new URL(url as string);
-        return parsed.pathname === "/Persons" && parsed.searchParams.get("userid") === embyUserId;
+        return (
+          parsed.pathname === "/Persons" &&
+          parsed.searchParams.get("userid") === embyUserId &&
+          parsed.searchParams.get("PersonTypes") === ACTOR_PERSON_TYPES_QUERY
+        );
       }),
     ).toBe(true);
   });
