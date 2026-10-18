@@ -8,6 +8,7 @@ import { isPrimaryVideoFile } from "../scrape/media/generatedSidecarVideos";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
 import { PublicationConflictError } from "./conflicts";
 import { CreatedDirectories, outputFileSystem, removeEmptyDirectory } from "./outputFileSystem";
+import { publicationJournal, TemporaryPaths } from "./publicationJournal";
 import type { PublicationFileSystem } from "./types";
 import { type WriteArtifact, WriteOutput } from "./WriteOutput";
 
@@ -60,7 +61,8 @@ export class MoveOutput {
     reorganize?: boolean;
   }): Promise<TResult> {
     const fs = this.fileSystem;
-    const temporaryPaths = new Set<string>();
+    const temporaryPaths = new TemporaryPaths();
+    const parkedPaths: string[] = [];
     const retainedSources = new Map<string, MediaFileFacts>();
     const relocations: Relocation[] = [];
     let renamedFolder: Relocation | undefined;
@@ -164,6 +166,8 @@ export class MoveOutput {
                 `${PARKED_SOURCE_PREFIX}${randomUUID()}-${path.basename(move.sourcePath)}`,
               );
               await assertMoveTargetAbsent(parked, fs);
+              publicationJournal.record(parked, move.sourcePath);
+              parkedPaths.push(parked);
               await fs.rename(move.sourcePath, parked);
               relocations.push({ from: move.sourcePath, to: parked, kind: "renamed" });
               parkedSources.set(move.sourcePath, parked);
@@ -233,7 +237,7 @@ export class MoveOutput {
               await assertSource(move, sourcePath);
               await assertTarget(move, sourcePath);
               await fs.rename(staging, move.targetPath);
-              temporaryPaths.delete(staging);
+              temporaryPaths.settle(staging);
               relocations.push({ from: sourcePath, to: move.targetPath, kind: "copied" });
               if (move.transfer === "move") retainedSources.set(sourcePath, move);
             } else {
@@ -281,12 +285,14 @@ export class MoveOutput {
       }
       throw error;
     } finally {
-      for (const staging of temporaryPaths) {
-        try {
-          await fs.rm(staging, { force: true });
-        } catch (error) {
-          this.logger.warn(`Failed to remove publication staging ${staging}: ${toErrorMessage(error)}`);
-        }
+      await temporaryPaths.removeAll(fs, warn);
+      // A parked source still on disk could not be relocated or put back, so its record stays for recovery.
+      for (const parked of parkedPaths) {
+        const remaining = await fs.lstat(parked).then(
+          () => true,
+          (error: NodeJS.ErrnoException) => error.code !== "ENOENT",
+        );
+        if (!remaining) publicationJournal.forget(parked);
       }
       if (!committed) await directories.removeEmpty(warn);
     }

@@ -7,6 +7,7 @@ export * from "./mediaLibraryRepository";
 export * from "./mediaRootRepository";
 export * from "./migrate";
 export * from "./pendingRepository";
+export * from "./publicationJournalRepository";
 export * from "./scanTaskRepository";
 export { PENDING_KINDS, type PendingKind } from "./schema";
 export * from "./scrapeRunRepository";

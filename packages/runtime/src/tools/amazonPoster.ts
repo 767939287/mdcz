@@ -13,6 +13,7 @@ import { parseNfoSnapshot } from "../maintenance/nfoSnapshot";
 import type { RuntimeDownloadNetworkClient } from "../network";
 import { acquireOutputDirectories } from "../publication/outputMutex";
 import { toRootFileRef } from "../publication/outputRefs";
+import { publicationJournal } from "../publication/publicationJournal";
 import type { PublicationOutputPort } from "../publication/types";
 import { WriteOutput } from "../publication/WriteOutput";
 import { DirectoryInventory } from "../scrape/DirectoryInventory";
@@ -248,6 +249,7 @@ export const applyAmazonPosters = async (
       replacedExisting = await pathExists(savedPosterPath);
       await mkdir(dirname(savedPosterPath), { recursive: true });
       const tempPosterPath = join(dirname(savedPosterPath), `.mdcz-staging-${randomUUID()}.jpg`);
+      publicationJournal.record(tempPosterPath);
       try {
         await networkClient.download(item.amazonPosterUrl.trim(), tempPosterPath);
         const validation = await validateImageFn(tempPosterPath);
@@ -291,6 +293,7 @@ export const applyAmazonPosters = async (
       } finally {
         try {
           await rm(tempPosterPath, { force: true });
+          publicationJournal.forget(tempPosterPath);
         } catch (error) {
           logger.warn(`Failed to remove poster staging ${tempPosterPath}: ${toErrorText(error)}`);
         }

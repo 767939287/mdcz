@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { filesystemPathKey, type MediaRoot } from "@mdcz/media-store";
 import type { Configuration } from "@mdcz/shared/config";
@@ -23,6 +23,7 @@ import {
   retainedRegisteredFeatures,
 } from "../publication/movieArtifacts";
 import { toRootFileRef } from "../publication/outputRefs";
+import { createStagingDirectory, removeStagingDirectory } from "../publication/publicationJournal";
 import type { RuntimeActorImageService, RuntimeActorSourceProvider } from "./actorOutput";
 import type { AggregationResult, AggregationService, ManualScrapeOptions } from "./aggregation";
 import { DirectoryInventory } from "./DirectoryInventory";
@@ -458,7 +459,7 @@ export class FileScraper {
         assets: prepared.assets,
       };
       await mkdir(plan.metadataDir, { recursive: true });
-      const directory = await mkdtemp(path.join(plan.metadataDir, ".mdcz-staging-"));
+      const directory = await createStagingDirectory(plan.metadataDir);
       stagingDir = directory;
       const metadataOutputDir = plan.metadataDir;
       let crawlerData = prepared.crawlerData;
@@ -570,12 +571,12 @@ export class FileScraper {
             nfo: publication.nfoPath ? toRootFileRef(publication.nfoPath, roots) : undefined,
           },
         },
-        release: () => rm(directory, { recursive: true, force: true }),
+        release: () => removeStagingDirectory(directory),
       };
     } catch (error) {
       if (stagingDir) {
         try {
-          await rm(stagingDir, { recursive: true, force: true });
+          await removeStagingDirectory(stagingDir);
         } catch (cleanupError) {
           throw new AggregateError([error, cleanupError], "Scrape preparation and staging cleanup failed");
         }

@@ -12,7 +12,7 @@ import { TrayService } from "@main/services/TrayService";
 import { type MainWindowCreationOptions, WindowService } from "@main/services/WindowService";
 import { resolveSiteProxyUrl } from "@mdcz/runtime/config";
 import { runtimeLoggerService } from "@mdcz/runtime/shared";
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 
 const QUIT_FORCE_EXIT_TIMEOUT_MS = 15_000;
 
@@ -190,6 +190,8 @@ if (!app.requestSingleInstanceLock()) {
       const logger = loggerService.getLogger("Main");
       const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
       logger.error(`Failed to initialize main process: ${message}`);
+      // Startup fails before any window exists, so without this the app just vanishes.
+      dialog.showErrorBox("MDCz failed to start", message);
       app.quit();
     });
 
