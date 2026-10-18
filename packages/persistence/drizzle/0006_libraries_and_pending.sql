@@ -78,7 +78,8 @@ ALTER TABLE `library_items` DROP COLUMN `uncensored_ambiguous`;
 --> statement-breakpoint
 CREATE TABLE `downloader_sources` (
   `key` text PRIMARY KEY NOT NULL,
-  `since` integer NOT NULL
+  `since` integer NOT NULL,
+  `save_path` text NOT NULL
 ) STRICT;
 --> statement-breakpoint
 CREATE TABLE `downloader_torrents` (

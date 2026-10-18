@@ -1,3 +1,4 @@
+import { isPathInside } from "@mdcz/media-store";
 import { eq } from "drizzle-orm";
 import type { PersistenceDatabase } from "./database";
 import { downloaderSources, downloaderTorrents } from "./schema";
@@ -6,9 +7,13 @@ import { downloaderSources, downloaderTorrents } from "./schema";
 export class DownloaderRepository {
   constructor(private readonly database: PersistenceDatabase) {}
 
-  /** When polling of `sourceKey` began; the first call records `now`. */
-  since(sourceKey: string, now = new Date()): Date {
-    this.database.db.insert(downloaderSources).values({ key: sourceKey, since: now }).onConflictDoNothing().run();
+  /** Records the category's current save path and returns when polling of `sourceKey` began; the first call records `now`. */
+  track(sourceKey: string, savePath: string, now = new Date()): Date {
+    this.database.db
+      .insert(downloaderSources)
+      .values({ key: sourceKey, since: now, savePath })
+      .onConflictDoUpdate({ target: downloaderSources.key, set: { savePath } })
+      .run();
     const row = this.database.db
       .select({ since: downloaderSources.since })
       .from(downloaderSources)
@@ -16,6 +21,15 @@ export class DownloaderRepository {
       .get();
     if (!row) throw new Error(`Downloader source not recorded: ${sourceKey}`);
     return row.since;
+  }
+
+  /** Whether the file lies in a polled category's save path, where the downloader keeps seeding it. */
+  ownsPath(filePath: string): boolean {
+    return this.database.db
+      .select({ savePath: downloaderSources.savePath })
+      .from(downloaderSources)
+      .all()
+      .some((row) => isPathInside(row.savePath, filePath));
   }
 
   handledHashes(sourceKey: string): Set<string> {

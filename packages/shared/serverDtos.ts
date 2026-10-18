@@ -8,7 +8,6 @@ import {
   LLM_REASONING_OPTIONS,
   LLM_SERVICE_TYPE_OPTIONS,
 } from "./llm";
-import { PLACEMENT_MODES } from "./mediaLibrary";
 import { assetRefSchema, type RootFileRef, rootFileRefSchema } from "./mediaRef";
 import { normalizedCropRegionSchema } from "./posterCrop";
 import { FAILURE_REASONS, siteHealthSchema } from "./siteResults";
@@ -926,7 +925,7 @@ export const integrationStatusResponseSchema = z.object({
     lastPollAt: z.string().nullable(),
     error: z.string().nullable(),
     /** The library whose source holds the category's save path. */
-    library: z.object({ id: z.string(), name: z.string(), placement: z.enum(PLACEMENT_MODES) }).nullable(),
+    library: z.object({ id: z.string(), name: z.string() }).nullable(),
     failures: z.array(z.object({ name: z.string(), error: z.string() })),
   }),
 });

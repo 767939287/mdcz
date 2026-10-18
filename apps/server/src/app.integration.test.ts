@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deterministicMediaRootId } from "@mdcz/media-store";
 import { RECENT_ACQUISITION_LIMIT } from "@mdcz/runtime/library";
@@ -833,7 +833,7 @@ describe("buildServer composition integration", () => {
     expect(keyOnSettings.statusCode).toBe(401);
     expect(revoked.statusCode).toBe(401);
   });
-  it("polls a qBittorrent category and scrapes each torrent that finished after polling began, once", async () => {
+  it("polls a qBittorrent category, scrapes each torrent that finished after polling began once, and keeps it seeding", async () => {
     const root = await createTempRoot("qbittorrent-root");
     const outside = await createTempRoot("qbittorrent-outside");
     await writeFile(join(root, "ABC-123.mp4"), "video");
@@ -883,7 +883,7 @@ describe("buildServer composition integration", () => {
       scrapeAggregation: createTestAggregation(`${image.url}/cover.png`),
     });
     const token = await loginAsAdmin(fastify);
-    await createTestLibrary(fastify, token, root, { placement: "hardlink" });
+    await createTestLibrary(fastify, token, root);
     const qbittorrentStatus = async () =>
       (
         await fastify.inject({
@@ -900,7 +900,7 @@ describe("buildServer composition integration", () => {
     await expect.poll(qbittorrentStatus).toMatchObject({
       configured: true,
       error: null,
-      library: { name: "Library", placement: "hardlink" },
+      library: { name: "Library" },
       failures: [{ name: "Elsewhere", error: expect.stringContaining("No library's source directory contains") }],
     });
     await expect
@@ -915,6 +915,14 @@ describe("buildServer composition integration", () => {
     expect((await services.activity.list()).entries).toHaveLength(1);
     expect(requests.filter((pathname) => pathname === "/api/v2/auth/login")).toHaveLength(1);
     expect((await services.library.list()).entries.map((entry) => entry.number)).toEqual(["ABC-123"]);
+    // The library moves files, but the torrent's file stays in the save path and is hardlinked into the output.
+    const placed = (await readdir(join(root, "JAV_output"), { recursive: true })).filter((name) =>
+      name.endsWith(".mp4"),
+    );
+    expect(placed).toHaveLength(1);
+    expect((await stat(join(root, "JAV_output", placed[0] ?? ""))).ino).toBe(
+      (await stat(join(root, "ABC-123.mp4"))).ino,
+    );
   });
 
   it("delivers outbound automation webhooks when task updates are published", async () => {

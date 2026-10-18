@@ -176,7 +176,6 @@ export const settings: Messages["settings"] = {
     qbittorrentChecked: (time, library) =>
       library ? `${time} 已检查；完成的种子进入媒体库「${library}」。` : `${time} 已检查。`,
     qbittorrentNoLibrary: "保存路径未匹配到任何媒体库的来源目录，请添加媒体库或配置路径映射。",
-    qbittorrentMoveHint: (library) => `媒体库「${library}」采用移动模式，会导致停止做种；建议改为硬链接。`,
     qbittorrentFailures: (count) => `${count} 个种子未能刮削，MDCz 每分钟重试：`,
     addressHint: "以下地址取自当前浏览器。若下载器运行在其他容器中，请换成该容器能访问到的地址。",
     sendTest: "发送测试消息",

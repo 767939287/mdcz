@@ -194,8 +194,6 @@ export const settings = {
       library ? `Checked ${time}; finished torrents go to library ${library}.` : `Checked ${time}.`,
     qbittorrentNoLibrary:
       "Category save path is not inside any library's source directory. Add a library or path mapping.",
-    qbittorrentMoveHint: (library: string) =>
-      `Library "${library}" moves files and stops seeding; switch to hardlink to keep seeding.`,
     qbittorrentFailures: (count: number) =>
       `${count} ${count === 1 ? "torrent was" : "torrents were"} not scraped; MDCz retries every minute:`,
     addressHint:

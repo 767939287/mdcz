@@ -115,14 +115,15 @@ export class QbittorrentService {
       const savePath = /^([a-z]:)?[\\/]/iu.test(category.savePath ?? "")
         ? (category.savePath ?? "")
         : `${await this.getText(settings, "/api/v2/app/defaultSavePath")}/${category.savePath || settings.category}`;
-      const library = await this.deps.libraries.findBySourcePath(applyPathMappings(savePath, pathMappings));
+      const hostSavePath = applyPathMappings(savePath, pathMappings);
+      const library = await this.deps.libraries.findBySourcePath(hostSavePath);
       const torrents = (await this.get(
         settings,
         `/api/v2/torrents/info?filter=completed&category=${encodeURIComponent(settings.category)}`,
       )) as CompletedTorrent[];
       const { downloaders } = (await this.deps.persistence.getState()).repositories;
       const sourceKey = `${settings.url.replace(/\/+$/u, "")}#${settings.category}`;
-      const since = downloaders.since(sourceKey).getTime();
+      const since = downloaders.track(sourceKey, hostSavePath).getTime();
       const handled = downloaders.handledHashes(sourceKey);
       const current = new Set(torrents.map((torrent) => torrent.hash));
       for (const hash of this.#failures.keys()) if (!current.has(hash)) this.#failures.delete(hash);
@@ -144,7 +145,7 @@ export class QbittorrentService {
         configured: true,
         lastPollAt,
         error: null,
-        library: library ? { id: library.id, name: library.name, placement: library.placement } : null,
+        library: library ? { id: library.id, name: library.name } : null,
         failures: [...this.#failures.values()],
       };
     } catch (error) {

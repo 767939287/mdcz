@@ -47,7 +47,10 @@ export const libraries: Messages["libraries"] = {
     scanIntervalHint: "补上变更事件遗漏的文件，例如不发送事件的网络挂载。",
   },
   placements: {
-    move: { label: "移动", description: "把视频移动到输出目录，按模板重命名。" },
+    move: {
+      label: "移动",
+      description: "把视频移动到输出目录，按模板重命名。轮询的 qBittorrent 分类中的视频改为硬链接，以便继续做种。",
+    },
     hardlink: {
       label: "硬链接",
       description: "在输出目录创建硬链接并保留源文件，种子可以继续做种；两个目录必须在同一卷上。",

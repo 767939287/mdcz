@@ -112,6 +112,7 @@ export class ScrapeService {
           libraries: state.repositories.mediaLibraries,
           pending: state.repositories.pending,
           mediaRoots: this.mediaRoots,
+          downloaders: state.repositories.downloaders,
         },
         onPublished: (directories, configuration) =>
           void notifyMediaServersOfPublish(

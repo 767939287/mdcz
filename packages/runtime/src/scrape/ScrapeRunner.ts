@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { filesystemPathKey, type MediaRoot, resolveRootRelativePath } from "@mdcz/media-store";
 import type {
+  DownloaderRepository,
   LibraryRepository,
   MediaLibraryRecord,
   MediaLibraryRepository,
@@ -148,6 +149,8 @@ export interface ScrapeRunnerDependencies {
     libraries: Pick<MediaLibraryRepository, "get">;
     pending: PendingRepository;
     mediaRoots: ConfiguredMediaRootService;
+    /** Polled downloaders; only the server has them. */
+    downloaders?: Pick<DownloaderRepository, "ownsPath">;
   };
   /** Directories that received published movies, for media servers to scan. */
   onPublished?: (directories: readonly string[], configuration: Configuration) => void;
@@ -915,6 +918,12 @@ export class ScrapeRunner {
               },
               options: {
                 ...scrapeOptions,
+                // Moving a file out of a downloader's save path stops its torrent seeding, so it is linked instead.
+                target:
+                  scrapeOptions.target.placement === "move" &&
+                  this.deps.persistence.downloaders?.ownsPath(member.sourcePath)
+                    ? { ...scrapeOptions.target, placement: "hardlink" as const }
+                    : scrapeOptions.target,
                 source: { rootId: member.rootId, relativePath: member.relativePath },
                 manualScrape: member.manualScrape,
                 localState: uncensoredChoice ? { uncensoredChoice } : undefined,

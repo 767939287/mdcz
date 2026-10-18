@@ -263,10 +263,11 @@ export const authSessions = sqliteTable("auth_sessions", {
 });
 
 // A downloader category MDCz polls, keyed by client URL and category. Torrents that completed before `since` were
-// already there when polling began and are left alone.
+// already there when polling began and are left alone. Files under `save_path` (a host path) are still seeding.
 export const downloaderSources = sqliteTable("downloader_sources", {
   key: text("key").primaryKey(),
   since: integer("since", { mode: "timestamp_ms" }).notNull(),
+  savePath: text("save_path").notNull(),
 });
 
 export const downloaderTorrents = sqliteTable(

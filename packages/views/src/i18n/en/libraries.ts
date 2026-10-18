@@ -49,7 +49,11 @@ export const libraries = {
     scanIntervalHint: "Catches what change events miss, such as network mounts that send none.",
   },
   placements: {
-    move: { label: "Move", description: "Move videos into the output directory, renamed by the templates." },
+    move: {
+      label: "Move",
+      description:
+        "Move videos into the output directory, renamed by the templates. Videos in the polled qBittorrent category are hardlinked instead, so they keep seeding.",
+    },
     hardlink: {
       label: "Hardlink",
       description:

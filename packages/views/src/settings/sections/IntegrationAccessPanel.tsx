@@ -42,9 +42,6 @@ export function QbittorrentStatusLine({ status }: { status: IntegrationStatusRes
         {text.qbittorrentChecked(new Date(status.lastPollAt).toLocaleString(), status.library?.name ?? null)}
       </p>
       {status.library ? null : <p className="text-amber-600 dark:text-amber-400">{text.qbittorrentNoLibrary}</p>}
-      {status.library?.placement === "move" ? (
-        <p className="text-amber-600 dark:text-amber-400">{text.qbittorrentMoveHint(status.library.name)}</p>
-      ) : null}
       {status.failures.length ? (
         <div className="text-destructive">
           <p>{text.qbittorrentFailures(status.failures.length)}</p>
