@@ -8,6 +8,9 @@ const UNCENSORED_NUMBER_PATTERNS = [
   /^HEYZO-\d+/iu,
   /^(?:1PON(?:DO)?|10MU(?:SUME)?|CARIB(?:BEANCOM)?|PACO|MURA|KIN8)[-_]?\d+/iu,
   /^\d{6}[-_]\d{2,3}$/u,
+  // Uncensored studio labels whose numbers are shaped like censored ones (S Model, Sky High, Catwalk, Laforet…);
+  // Kirari numbers carry an S before the digits (MKBD-S120).
+  /^(?:(?:BT|CT|EMP|CCDV|CWP|CWPBD|DSAM|DRC|DRG|DRGBD|GACHIG?|LAF|LAFBD|KTG|KP|KG|LLDV|MCDV|MKBD|MKD|MMDV|NIP|PT|QE|RHJ|S2M|SKY|SKYHD|SMBD|SMD|SMDV|SSDV|SSKP|TRG|YKB|XXX-AV|HEYDOUGA)[-_]|MKB?D[-_]S)\d/iu,
 ];
 
 export const classifyNumber = (number: string): ContentType => {
