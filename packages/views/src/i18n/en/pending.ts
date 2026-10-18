@@ -35,7 +35,6 @@ export const pending = {
     failed: (reason: string) => reason,
   },
   skipReasons: {
-    number_mismatch: "the number doesn't belong to this site's labels",
     content_type: "targets a different content type; queried as fallback when primary sites miss",
     missing_credential: "needs a signed-in cookie",
     unavailable: "unavailable on this network",
@@ -56,6 +55,7 @@ export const pending = {
   scrapeUrl: "Scrape this page",
   rememberMapping: "Remember rule: file names containing",
   rememberMappingHint: "map to this number",
+  rememberMappingMatch: "File name text to match",
   ignoreToken: "Ignore text pattern in file names",
   ignoreTokenPlaceholder: "e.g. hhd800.com@",
   saveIgnoreToken: "Save and retry",

@@ -4,6 +4,7 @@ import {
   LibraryAvailabilityChecker,
   type MediaLibraryService,
   parseLibraryCrawlerData,
+  RECENT_ACQUISITION_LIMIT,
   relinkLibraryFile,
   toLibraryEntryDto,
   toLibraryEntryFilter,
@@ -132,11 +133,11 @@ export class LibraryService {
     const state = await this.persistence.getState();
     const [roots, summary] = await Promise.all([
       this.mediaRoots.list(),
-      state.repositories.library.getOverviewSummary(8),
+      state.repositories.library.getOverviewSummary(RECENT_ACQUISITION_LIMIT),
     ]);
     const rootMap = new Map(roots.roots.map((root) => [root.id, root]));
     const entries = summary.recentEntries.filter((entry) => rootMap.has(entry.rootId));
-    const recent = createRecentAcquisitionsFromEntries(entries, 8);
+    const recent = createRecentAcquisitionsFromEntries(entries);
     const recentAcquisitions = await Promise.all(
       recent.map(async (entry) => {
         const record = entries.find((candidate) => candidate.id === entry.id);

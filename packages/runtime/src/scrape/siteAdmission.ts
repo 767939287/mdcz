@@ -58,7 +58,6 @@ export function resolveSiteAdmission(input: SiteAdmissionInput): {
     const matches = crawler?.numberPattern ? crawler.numberPattern.test(number) : serves(contentType);
     const isDeferred = !matches && !input.manualScrape && fallbackType !== undefined && serves(fallbackType);
     if (!matches && !input.manualScrape && !isDeferred) {
-      rejected.push(skip(site, "number_mismatch"));
       continue;
     }
 

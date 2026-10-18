@@ -17,8 +17,8 @@ function Overview() {
   const sitesQ = useQuery({ queryKey: ["overview", "sites"], queryFn: () => ipc.crawler.listSites() });
   return (
     <div className="h-full overflow-y-auto bg-surface-canvas text-foreground">
-      <main className="mx-auto grid w-full max-w-[1600px] grid-cols-12 gap-8 px-6 py-8 md:px-10 lg:px-12 lg:py-12">
-        <section className="col-span-12 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+      <main className="mx-auto grid w-full max-w-[1600px] grid-cols-12 gap-6 px-6 py-6 md:px-10 lg:px-12 lg:py-8">
+        <section className="col-span-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <OverviewHeroStartCard className="lg:col-span-2" />
           <OverviewMaintenanceCard />
         </section>
@@ -30,8 +30,8 @@ function Overview() {
           }}
         />
 
-        <section className="col-span-12 mt-8">
-          <h2 className="mb-8 text-2xl font-bold tracking-tight">{t.desktop.recentAcquisitions}</h2>
+        <section className="col-span-12">
+          <h2 className="mb-4 text-xl font-bold tracking-tight">{t.desktop.recentAcquisitions}</h2>
           <RecentAcquisitionsGrid />
         </section>
       </main>

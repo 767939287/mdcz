@@ -55,21 +55,19 @@ describe("resolveSiteAdmission", () => {
     const result = admit("SNOS-309");
 
     expect(result.admitted).toContain(Website.JAVDB);
-    expect(result.admitted).not.toEqual(expect.arrayContaining([Website.FC2, Website.FC2HUB, Website.PPVDATABANK]));
-    expect(
-      result.rejected.filter(({ skipReason }) => skipReason === "number_mismatch").map(({ site }) => site),
-    ).toEqual(
-      expect.arrayContaining([
-        Website.FC2,
-        Website.FC2HUB,
-        Website.PPVDATABANK,
-        Website.DAHLIA,
-        Website.FALENO,
-        Website.KM_PRODUCE,
-        Website.PRESTIGE,
-        Website.MGSTAGE,
-      ]),
-    );
+    for (const site of [
+      Website.FC2,
+      Website.FC2HUB,
+      Website.PPVDATABANK,
+      Website.DAHLIA,
+      Website.FALENO,
+      Website.KM_PRODUCE,
+      Website.PRESTIGE,
+      Website.MGSTAGE,
+    ]) {
+      expect(result.admitted).not.toContain(site);
+    }
+    expect(result.rejected).toEqual([]);
     for (const [number, site] of [
       ["DLDSS-300", Website.DAHLIA],
       ["FSDSS-564", Website.FALENO],
@@ -88,7 +86,11 @@ describe("resolveSiteAdmission", () => {
       ["H4610-ORI1693", Website.H4610],
     ] as const) {
       expect(admit(number, { configuredSites: [site] }).admitted).toEqual([site]);
-      expect(admit("UNRELATED-123", { configuredSites: [site] }).rejected).toEqual([skipped(site, "number_mismatch")]);
+      expect(admit("UNRELATED-123", { configuredSites: [site] })).toEqual({
+        admitted: [],
+        deferred: [],
+        rejected: [],
+      });
     }
   });
 
@@ -166,9 +168,6 @@ describe("resolveSiteAdmission", () => {
       ]),
     });
 
-    expect(result.rejected).toEqual([
-      skipped(Website.FANTIA, "missing_credential"),
-      skipped(Website.FC2, "number_mismatch"),
-    ]);
+    expect(result.rejected).toEqual([skipped(Website.FANTIA, "missing_credential")]);
   });
 });

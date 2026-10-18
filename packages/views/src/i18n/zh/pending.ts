@@ -32,7 +32,6 @@ export const pending: Messages["pending"] = {
     failed: (reason: string) => reason,
   },
   skipReasons: {
-    number_mismatch: "番号不属于该站点的厂牌",
     content_type: "属于其他内容类型，仅在主要站点无结果时作为备选查询",
     missing_credential: "需要已登录的 Cookie",
     unavailable: "在当前网络下不可用",
@@ -53,6 +52,7 @@ export const pending: Messages["pending"] = {
   scrapeUrl: "刮削此页面",
   rememberMapping: "记住规则：文件名包含",
   rememberMappingHint: "时对应此番号",
+  rememberMappingMatch: "要匹配的文件名文本",
   ignoreToken: "过滤文件名中的特定文本",
   ignoreTokenPlaceholder: "例如 hhd800.com@",
   saveIgnoreToken: "保存并重试",

@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deterministicMediaRootId } from "@mdcz/media-store";
+import { RECENT_ACQUISITION_LIMIT } from "@mdcz/runtime/library";
 import { defaultConfiguration } from "@mdcz/shared/config";
 import { Website } from "@mdcz/shared/enums";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -576,7 +577,7 @@ describe("buildServer composition integration", () => {
     expect(overviewResponse.statusCode).toBe(200);
     expect(overviewResponse.json().result.data.output).toEqual({ fileCount: 10, totalBytes: 33 });
     const recentAcquisitions = overviewResponse.json().result.data.recentAcquisitions;
-    expect(recentAcquisitions).toHaveLength(8);
+    expect(recentAcquisitions).toHaveLength(RECENT_ACQUISITION_LIMIT);
     expect(recentAcquisitions[0]).toMatchObject({
       id: "newer-entry-7",
       number: "ABC-107",

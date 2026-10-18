@@ -70,8 +70,8 @@ export function OverviewPage() {
 
   return (
     <main className="h-full overflow-y-auto bg-surface-canvas text-foreground">
-      <div className="mx-auto grid w-full max-w-[1600px] grid-cols-12 gap-8 px-6 py-8 md:px-10 lg:px-12 lg:py-12">
-        <section className="col-span-12 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+      <div className="mx-auto grid w-full max-w-[1600px] grid-cols-12 gap-6 px-6 py-6 md:px-10 lg:px-12 lg:py-8">
+        <section className="col-span-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <OverviewHeroStartCard
             className="lg:col-span-2"
             data={output}
@@ -96,16 +96,9 @@ export function OverviewPage() {
 
         {overviewQ.error && <ErrorBanner>{toErrorMessage(overviewQ.error)}</ErrorBanner>}
 
-        <ActivityTimelineCard
-          entries={activityQ.data?.entries ?? []}
-          onOpenMaintenance={() => {
-            void navigate({ to: buildHref("/workbench", { intent: "maintenance" }) });
-          }}
-        />
-
-        <section className="col-span-12 mt-8">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold tracking-tight">{t.web.recentAcquisitions}</h2>
+        <section className="col-span-12">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold tracking-tight">{t.web.recentAcquisitions}</h2>
           </div>
           <RecentAcquisitionsGrid
             getImageSrc={(path, item) =>
@@ -120,6 +113,13 @@ export function OverviewPage() {
             }}
           />
         </section>
+
+        <ActivityTimelineCard
+          entries={activityQ.data?.entries ?? []}
+          onOpenMaintenance={() => {
+            void navigate({ to: buildHref("/workbench", { intent: "maintenance" }) });
+          }}
+        />
       </div>
       <RecentAcquisitionRemoveDialog
         open={Boolean(removeTarget)}

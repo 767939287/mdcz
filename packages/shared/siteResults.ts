@@ -29,7 +29,6 @@ export const UNAVAILABLE_FAILURE_REASONS: ReadonlySet<FailureReason> = new Set([
 ]);
 
 export const SKIP_REASONS = [
-  "number_mismatch",
   /** Serves only the fallback content type; tried when every other site misses. */
   "content_type",
   "missing_credential",

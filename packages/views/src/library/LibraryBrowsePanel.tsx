@@ -1,11 +1,17 @@
 import { toErrorMessage } from "@mdcz/shared/error";
 import type { LibraryHealthIssue, LibrarySummaryResponse } from "@mdcz/shared/serverDtos";
-import { Button, cn, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@mdcz/ui";
-import { ChevronDown, LayoutGrid, List, LoaderCircle, Wrench, X } from "lucide-react";
+import { Button, cn } from "@mdcz/ui";
+import { ChevronDown, LoaderCircle, Wrench, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useT } from "../i18n";
 import { HEALTH_FIX_PRESETS, type LibraryFacetSelection } from "./healthIssues";
+
+const FACET_KINDS = [
+  { kind: "actor", key: "actors" },
+  { kind: "studio", key: "studios" },
+  { kind: "tag", key: "tags" },
+] as const;
 
 export interface LibraryBrowseControls {
   libraries: Array<{ id: string; name: string }>;
@@ -22,14 +28,15 @@ export interface LibraryBrowseControls {
   onFix: (issue: LibraryHealthIssue) => Promise<void>;
 }
 
-const ALL_LIBRARIES = "__all__";
-const FACET_KINDS = [
-  { kind: "actor", key: "actors" },
-  { kind: "studio", key: "studios" },
-  { kind: "tag", key: "tags" },
-] as const;
-
-export function LibraryBrowsePanel({ browse, matchCount }: { browse: LibraryBrowseControls; matchCount: number }) {
+export function LibraryBrowsePanel({
+  browse,
+  matchCount,
+  summaryText,
+}: {
+  browse: LibraryBrowseControls;
+  matchCount: number;
+  summaryText?: string;
+}) {
   const t = useT();
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [fixing, setFixing] = useState(false);
@@ -44,104 +51,76 @@ export function LibraryBrowsePanel({ browse, matchCount }: { browse: LibraryBrow
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        {browse.libraries.length > 1 ? (
-          <Select
-            value={browse.libraryId ?? ALL_LIBRARIES}
-            onValueChange={(value) => browse.onLibraryChange(value === ALL_LIBRARIES ? undefined : value)}
-          >
-            <SelectTrigger aria-label={t.library.libraryAriaLabel} className="h-9 w-full sm:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_LIBRARIES}>{t.library.allLibraries}</SelectItem>
-              {browse.libraries.map((library) => (
-                <SelectItem key={library.id} value={library.id}>
-                  {library.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-        <div className="inline-flex rounded-quiet bg-surface-low p-1 shadow-inner sm:ml-auto">
-          {(["list", "wall"] as const).map((view) => (
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {shownIssues.length > 0 ? (
+            <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+              {t.library.health.title}
+            </span>
+          ) : null}
+          {shownIssues.map((issue) => {
+            const count = summary?.issues[issue] ?? 0;
+            const active = health === issue;
+            return (
+              <Button
+                aria-pressed={active}
+                className={cn("h-7 rounded-full px-3 text-xs font-semibold", active && "border-primary text-primary")}
+                key={issue}
+                onClick={() => browse.onHealthChange(active ? undefined : issue)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {t.library.health.issues[issue]}
+                <span className="font-numeric">{count}</span>
+              </Button>
+            );
+          })}
+          {facet ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2.5 py-0.5 text-xs text-foreground">
+              <span className="text-muted-foreground">
+                {t.library.facets[FACET_KINDS.find(({ kind }) => kind === facet.kind)?.key ?? "actors"]}:
+              </span>
+              <strong>{facet.name}</strong>
+            </span>
+          ) : null}
+          {filtered ? (
             <Button
-              aria-pressed={browse.view === view}
-              className={cn(
-                "h-7 gap-1.5 rounded-[var(--radius-quiet-sm)] px-3 text-xs font-bold text-muted-foreground",
-                browse.view === view && "bg-surface text-foreground shadow-sm",
-              )}
-              key={view}
-              onClick={() => browse.onViewChange(view)}
+              className="h-7 gap-1 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                browse.onHealthChange(undefined);
+                browse.onFacetChange(undefined);
+              }}
               size="sm"
               type="button"
               variant="ghost"
             >
-              {view === "list" ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
-              {t.library.view[view]}
+              <X className="h-3.5 w-3.5" />
+              {t.library.health.clear}
             </Button>
-          ))}
+          ) : null}
+          {shownIssues.length === 0 && !facet && summaryText ? (
+            <span className="font-numeric text-xs text-muted-foreground">{summaryText}</span>
+          ) : null}
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {shownIssues.length > 0 ? (
-          <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
-            {t.library.health.title}
-          </span>
-        ) : null}
-        {shownIssues.map((issue) => {
-          const count = summary?.issues[issue] ?? 0;
-          const active = health === issue;
-          return (
-            <Button
-              aria-pressed={active}
-              className={cn("h-7 rounded-full px-3 text-xs font-semibold", active && "border-primary text-primary")}
-              key={issue}
-              onClick={() => browse.onHealthChange(active ? undefined : issue)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {t.library.health.issues[issue]}
-              <span className="font-numeric">{count}</span>
-            </Button>
-          );
-        })}
-        <Button
-          aria-expanded={facetsOpen}
-          className="ml-auto h-7 gap-1 px-3 text-xs"
-          onClick={() => setFacetsOpen((open) => !open)}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          {t.library.facets.title}
-          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", facetsOpen && "rotate-180")} />
-        </Button>
-        {filtered ? (
+        <div className="ml-auto flex items-center gap-3">
+          {(shownIssues.length > 0 || facet) && summaryText ? (
+            <span className="hidden font-numeric text-xs text-muted-foreground sm:inline">{summaryText}</span>
+          ) : null}
           <Button
+            aria-expanded={facetsOpen}
             className="h-7 gap-1 px-3 text-xs"
-            onClick={() => {
-              browse.onHealthChange(undefined);
-              browse.onFacetChange(undefined);
-            }}
+            onClick={() => setFacetsOpen((open) => !open)}
             size="sm"
             type="button"
             variant="ghost"
           >
-            <X className="h-3.5 w-3.5" />
-            {t.library.health.clear}
+            {t.library.facets.title}
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", facetsOpen && "rotate-180")} />
           </Button>
-        ) : null}
+        </div>
       </div>
-
-      {facet ? (
-        <p className="text-xs text-muted-foreground">
-          {t.library.facets[FACET_KINDS.find(({ kind }) => kind === facet.kind)?.key ?? "actors"]}:{" "}
-          <strong>{facet.name}</strong>
-        </p>
-      ) : null}
 
       {facetsOpen && summary ? (
         <div className="grid gap-4 rounded-quiet-lg border border-border/40 bg-surface p-4 md:grid-cols-3">

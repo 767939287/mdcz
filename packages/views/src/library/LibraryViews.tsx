@@ -14,6 +14,11 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -27,7 +32,9 @@ import {
   Database,
   FolderOpen,
   Layers,
+  LayoutGrid,
   Link2,
+  List,
   LoaderCircle,
   MoreHorizontal,
   RefreshCw,
@@ -39,6 +46,8 @@ import { toast } from "sonner";
 import { useT } from "../i18n";
 import { type LibraryBrowseControls, LibraryBrowsePanel } from "./LibraryBrowsePanel";
 import { LibraryPosterWall } from "./LibraryPosterWall";
+
+const ALL_LIBRARIES = "__all__";
 
 export type LibraryAvailabilityFilter = "all" | LibraryEntryDto["available"];
 
@@ -106,26 +115,17 @@ export function LibraryIndexView({
   const listRef = useRef<HTMLElement>(null);
   const [listOffset, setListOffset] = useState(0);
 
-  const availabilityFilters = useMemo<Array<{ label: string; value: LibraryAvailabilityFilter }>>(
-    () => [
-      { label: t.library.filter.all, value: "all" },
-      { label: t.library.filter.available, value: "available" },
-      { label: t.library.filter.unavailable, value: "unavailable" },
-      { label: t.library.filter.partial, value: "partial" },
-      { label: t.library.filter.unchecked, value: "unchecked" },
-    ],
-    [t.library.filter],
-  );
-
-  const { availableCount, filteredEntries, totalSize, unknownCount, unavailableCount } = useMemo(() => {
+  const { availableCount, filteredEntries, partialCount, totalSize, unknownCount, unavailableCount } = useMemo(() => {
     let availableCount = 0;
     let unavailableCount = 0;
+    let partialCount = 0;
     let unknownCount = 0;
     let totalSize = 0;
     const filteredEntries: LibraryEntryDto[] = [];
     for (const entry of entries) {
       if (entry.available === "available") availableCount += 1;
       else if (entry.available === "unavailable") unavailableCount += 1;
+      else if (entry.available === "partial") partialCount += 1;
       else if (entry.available === "unchecked") unknownCount += 1;
       const matchesAvailability = availabilityFilter === "all" || availabilityFilter === entry.available;
       if (matchesAvailability) {
@@ -133,8 +133,40 @@ export function LibraryIndexView({
         totalSize += Number.isFinite(entry.size) ? entry.size : 0;
       }
     }
-    return { availableCount, filteredEntries, totalSize, unknownCount, unavailableCount };
+    return { availableCount, filteredEntries, partialCount, totalSize, unknownCount, unavailableCount };
   }, [availabilityFilter, entries]);
+
+  const availabilityFilters = useMemo<Array<{ count: number; label: string; value: LibraryAvailabilityFilter }>>(
+    () =>
+      (
+        [
+          { label: t.library.filter.all, value: "all", count: entries.length },
+          { label: t.library.filter.available, value: "available", count: availableCount },
+          { label: t.library.filter.unavailable, value: "unavailable", count: unavailableCount },
+          { label: t.library.filter.partial, value: "partial", count: partialCount },
+          { label: t.library.filter.unchecked, value: "unchecked", count: unknownCount },
+        ] as const
+      ).filter(
+        (filter) =>
+          filter.value === "all" ||
+          filter.value === "available" ||
+          filter.count > 0 ||
+          availabilityFilter === filter.value,
+      ),
+    [
+      availabilityFilter,
+      availableCount,
+      entries.length,
+      partialCount,
+      t.library.filter,
+      unavailableCount,
+      unknownCount,
+    ],
+  );
+
+  const resolvedFileCount = fileCount ?? entries.reduce((count, entry) => count + entry.fileRefs.length, 0);
+  const summaryText = `${t.library.metrics.movies} ${total} · ${t.library.metrics.files} ${resolvedFileCount} · ${formatBytes(totalBytes ?? totalSize)}`;
+
   useLayoutEffect(() => {
     const updateOffset = () => setListOffset(listRef.current?.offsetTop ?? 0);
     updateOffset();
@@ -144,7 +176,7 @@ export function LibraryIndexView({
   }, []);
   const rowVirtualizer = useVirtualizer({
     count: filteredEntries.length,
-    estimateSize: () => 112,
+    estimateSize: () => 104,
     getItemKey: (index) => filteredEntries[index]?.id ?? index,
     getScrollElement: () => mainRef.current,
     overscan: 6,
@@ -154,26 +186,7 @@ export function LibraryIndexView({
   return (
     <TooltipProvider>
       <main className={cn("h-full overflow-y-auto bg-surface-canvas text-foreground", className)} ref={mainRef}>
-        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-8 lg:px-12 lg:py-10">
-          <header className="flex flex-wrap items-center justify-end gap-x-10 gap-y-4">
-            <Metric label={t.library.metrics.movies} value={total} />
-            <Metric
-              label={t.library.metrics.files}
-              value={fileCount ?? entries.reduce((count, entry) => count + entry.fileRefs.length, 0)}
-            />
-            <Metric label={t.library.metrics.available} value={availableCount} />
-            <Metric
-              className="text-amber-600 dark:text-amber-400"
-              label={t.library.metrics.unavailable}
-              value={unavailableCount}
-            />
-            <Metric
-              label={isAvailabilityLoading ? t.library.metrics.checking : t.library.metrics.unchecked}
-              value={unknownCount}
-            />
-            <Metric label={t.library.metrics.totalSize} value={formatBytes(totalBytes ?? totalSize)} />
-          </header>
-
+        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-6 py-6 lg:px-12 lg:py-8">
           {errorMessage && (
             <div className="flex items-center gap-3 rounded-quiet border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -181,44 +194,94 @@ export function LibraryIndexView({
             </div>
           )}
 
-          <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="inline-flex shrink-0 rounded-quiet bg-surface-low p-1 shadow-inner">
-              {availabilityFilters.map((filter) => (
-                <Button
-                  aria-pressed={availabilityFilter === filter.value}
-                  className={cn(
-                    "h-8 rounded-[var(--radius-quiet-sm)] px-4 text-xs font-bold text-muted-foreground transition-all",
-                    availabilityFilter === filter.value && "bg-surface text-foreground shadow-sm",
-                  )}
-                  key={filter.value}
-                  onClick={() => onAvailabilityFilterChange(filter.value)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
+          <section className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {browse && browse.libraries.length > 1 ? (
+                <Select
+                  value={browse.libraryId ?? ALL_LIBRARIES}
+                  onValueChange={(value) => browse.onLibraryChange(value === ALL_LIBRARIES ? undefined : value)}
                 >
-                  {filter.label}
-                </Button>
-              ))}
+                  <SelectTrigger aria-label={t.library.libraryAriaLabel} className="h-9 w-full sm:w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_LIBRARIES}>{t.library.allLibraries}</SelectItem>
+                    {browse.libraries.map((library) => (
+                      <SelectItem key={library.id} value={library.id}>
+                        {library.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+
+              <div className="inline-flex shrink-0 flex-wrap rounded-quiet bg-surface-low p-1 shadow-inner">
+                {availabilityFilters.map((filter) => (
+                  <Button
+                    aria-pressed={availabilityFilter === filter.value}
+                    className={cn(
+                      "h-7 gap-1.5 rounded-[var(--radius-quiet-sm)] px-3 text-xs font-bold text-muted-foreground transition-all",
+                      availabilityFilter === filter.value && "bg-surface text-foreground shadow-sm",
+                    )}
+                    key={filter.value}
+                    onClick={() => onAvailabilityFilterChange(filter.value)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <span>{filter.label}</span>
+                    <span className="font-numeric text-[11px] opacity-60">{filter.count}</span>
+                  </Button>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-1 items-center gap-3 sm:max-w-[700px] sm:justify-end">
-              <div className="relative w-full max-w-[520px]">
+
+            <div className="flex flex-1 items-center gap-2.5 sm:justify-end">
+              <div className="relative min-w-[200px] flex-1 sm:max-w-[380px]">
                 <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
                 <Input
                   aria-label={t.library.searchAriaLabel}
-                  className="h-10 border-transparent bg-surface-low pl-10 shadow-inner focus-visible:bg-surface focus-visible:ring-1"
+                  className="h-9 border-transparent bg-surface-low pl-9 text-sm shadow-inner focus-visible:bg-surface focus-visible:ring-1"
                   onChange={(event) => onQueryChange(event.target.value)}
                   placeholder={t.library.searchPlaceholder}
                   value={query}
                 />
               </div>
-              <Button className="h-10 shrink-0 px-5" onClick={onRefresh} type="button" variant="secondary">
-                <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+              <Button className="h-9 shrink-0 px-3.5" onClick={onRefresh} size="sm" type="button" variant="secondary">
+                <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
                 {t.library.refresh}
               </Button>
+              {browse ? (
+                <div className="inline-flex shrink-0 rounded-quiet bg-surface-low p-1 shadow-inner">
+                  {(["list", "wall"] as const).map((view) => (
+                    <Button
+                      aria-pressed={browse.view === view}
+                      className={cn(
+                        "h-7 gap-1.5 rounded-[var(--radius-quiet-sm)] px-3 text-xs font-bold text-muted-foreground",
+                        browse.view === view && "bg-surface text-foreground shadow-sm",
+                      )}
+                      key={view}
+                      onClick={() => browse.onViewChange(view)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {view === "list" ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
+                      {t.library.view[view]}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </section>
 
-          {browse ? <LibraryBrowsePanel browse={browse} matchCount={total} /> : null}
+          {browse ? (
+            <LibraryBrowsePanel browse={browse} matchCount={total} summaryText={summaryText} />
+          ) : (
+            <div className="flex items-center justify-end font-numeric text-xs text-muted-foreground">
+              {summaryText}
+            </div>
+          )}
 
           <section aria-label={t.library.listAriaLabel} className="flex flex-col gap-3" ref={listRef}>
             {filteredEntries.length > 0 && browse?.view === "wall" && (
@@ -230,7 +293,7 @@ export function LibraryIndexView({
                   const entry = filteredEntries[virtualRow.index];
                   return (
                     <div
-                      className="absolute top-0 left-0 w-full pb-3"
+                      className="absolute top-0 left-0 w-full pb-2.5"
                       data-index={virtualRow.index}
                       key={entry.id}
                       ref={rowVirtualizer.measureElement}
@@ -319,15 +382,6 @@ export function LibraryDeleteDialog({
   );
 }
 
-function Metric({ className, label, value }: { className?: string; label: string; value: ReactNode }) {
-  return (
-    <div className={cn("group flex flex-col items-end", className)}>
-      <span className="text-[10px] font-bold tracking-[0.15em] text-muted-foreground/70 uppercase">{label}</span>
-      <span className="font-numeric mt-0.5 text-lg font-extrabold tracking-tight text-foreground">{value}</span>
-    </div>
-  );
-}
-
 function LibraryEntryRow({
   entry,
   getImageSrc,
@@ -360,14 +414,13 @@ function LibraryEntryRow({
   const fileActionProps = { entry, onOpenFolder, onRemoveFile, onRelinkFile };
 
   return (
-    <div className="group rounded-quiet-lg border border-border/40 bg-surface p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-border/80 hover:bg-surface-floating hover:shadow-[0_12px_24px_rgba(0,0,0,0.06)]">
+    <div className="group rounded-quiet-lg border border-border/40 bg-surface p-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-border/80 hover:bg-surface-floating hover:shadow-[0_12px_24px_rgba(0,0,0,0.06)]">
       <div className="relative flex flex-wrap items-center gap-x-5 gap-y-3 lg:flex-nowrap lg:gap-6">
-        <div className="relative h-[72px] w-12 shrink-0 overflow-hidden rounded-[var(--radius-quiet-sm)] bg-surface-low shadow-sm">
+        <div className="relative h-[68px] w-12 shrink-0 overflow-hidden rounded-[var(--radius-quiet-sm)] bg-surface-low shadow-sm">
           {imageSrc ? (
             <img
               alt={title}
               className="h-full w-full object-cover"
-              loading="lazy"
               onError={() => setImageLoadFailed(true)}
               src={imageSrc}
             />
@@ -378,13 +431,13 @@ function LibraryEntryRow({
           )}
         </div>
         <div className="flex min-w-0 flex-1 basis-40 flex-col justify-center">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <span className="shrink-0 rounded bg-foreground/5 px-2 py-0.5 font-mono text-[11px] font-bold tracking-wider text-foreground/60">
               {id}
             </span>
             <span className="truncate text-base font-bold tracking-tight text-foreground">{title}</span>
           </div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+          <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[11px]">
             <ActorChips actors={entry.actors} />
             {isMultiFile && (
               <button
@@ -406,24 +459,20 @@ function LibraryEntryRow({
               </button>
             )}
             {displayFile && (
-              <MiddleEllipsisPath
-                rootDisplayName={displayFile.rootDisplayName}
-                relativePath={displayFile.relativePath}
-              />
+              <span
+                className="truncate font-mono font-medium text-muted-foreground/70"
+                title={[displayFile.rootDisplayName, displayFile.relativePath].filter(Boolean).join(" / ")}
+              >
+                {displayFile.fileName}
+              </span>
             )}
           </div>
         </div>
-        <div className="hidden shrink-0 items-center gap-8 font-numeric text-xs font-bold text-muted-foreground/60 lg:flex">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] font-bold uppercase opacity-50">{t.library.size}</span>
-            <span className="text-foreground/80">{formatBytes(entry.size)}</span>
-          </div>
-          <div className="flex min-w-28 flex-col items-end">
-            <span className="text-[10px] font-bold uppercase opacity-50">{t.library.updatedTime}</span>
-            <span className="text-foreground/80">{formatDate(latestEntryUpdate(entry))}</span>
-          </div>
+        <div className="hidden shrink-0 items-center gap-6 font-numeric text-xs font-semibold text-muted-foreground lg:flex">
+          <span className="text-foreground/75">{formatBytes(entry.size)}</span>
+          <span className="min-w-24 text-right text-muted-foreground/80">{formatDate(latestEntryUpdate(entry))}</span>
         </div>
-        <div className="ml-auto flex items-center gap-1 lg:pl-4">
+        <div className="ml-auto flex items-center gap-1.5 lg:pl-2">
           <StatusActionSlot available={entry.available} entry={entry} onDeleteEntry={onDeleteEntry} />
           <div className="flex items-center gap-1">
             {LinkComponent ? (
@@ -449,9 +498,9 @@ function LibraryEntryRow({
                 </TooltipTrigger>
                 <TooltipContent>{t.library.openFolder}</TooltipContent>
               </Tooltip>
-            ) : (
+            ) : onOpenFolder ? (
               <div className="h-8 w-8" />
-            )}
+            ) : null}
             {!isMultiFile && displayFile ? (
               <LibraryFileActions file={displayFile} {...fileActionProps} />
             ) : (

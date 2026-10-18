@@ -119,9 +119,12 @@ export const toLibraryAssets = (
   return mapped;
 };
 
+/** Matches the single row the overview grid shows at its widest breakpoint. */
+export const RECENT_ACQUISITION_LIMIT = 6;
+
 export const sortAndLimitRecentAcquisitions = <T extends RuntimeRecentAcquisition>(
   items: readonly T[],
-  limit = 50,
+  limit: number,
 ): T[] =>
   [...items]
     .sort((left, right) => {
@@ -181,14 +184,13 @@ export const isVisibleRecentLibraryEntry = (
 
 export const createRecentAcquisitionsFromEntries = (
   entries: readonly RuntimeLibraryEntrySummaryInput[],
-  limit = 50,
 ): RuntimeRecentAcquisition[] =>
   sortAndLimitRecentAcquisitions(
     entries
       .filter(isVisibleRecentLibraryEntry)
       .map((entry) => toRuntimeRecentAcquisition(entry))
       .filter((entry): entry is RuntimeRecentAcquisition => entry !== null),
-    limit,
+    RECENT_ACQUISITION_LIMIT,
   );
 
 export const getLatestLibraryEntryTimestamp = (

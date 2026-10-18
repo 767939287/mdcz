@@ -238,7 +238,9 @@ export class AggregationService {
     }
     if (admitted.length === 0 && deferred.length === 0) {
       await this.recordSiteResults?.(number, rejected);
-      const message = summarizeFailedSiteResults(number, rejected);
+      // Sites whose number patterns exclude this number are not recorded, so an empty list means none applies.
+      const message =
+        rejected.length > 0 ? summarizeFailedSiteResults(number, rejected) : `No configured site handles ${number}`;
       this.logger.warn(message);
       throw new ScrapeFailureError("not_found", message);
     }
