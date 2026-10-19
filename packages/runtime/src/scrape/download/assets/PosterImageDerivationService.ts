@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
+import { mkdir, rename, stat, unlink } from "node:fs/promises";
 import { dirname, extname, join, parse } from "node:path";
 import { resolveThumbToPosterCropRegion } from "@mdcz/shared/posterCrop";
 import sharp from "sharp";
@@ -60,8 +60,7 @@ export class PosterImageDerivationService {
     const outputPath = options.posterPath ?? options.targetPath;
 
     try {
-      // libvips can cache an open WebP file on Windows, preventing the subsequent publication rename.
-      const source = sharp(await readFile(thumbPath), { animated: false }).rotate();
+      const source = sharp(thumbPath, { animated: false }).rotate();
       const metadata = await source.metadata();
       const width = metadata.width ?? 0;
       const height = metadata.height ?? 0;

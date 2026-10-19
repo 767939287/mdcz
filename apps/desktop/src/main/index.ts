@@ -13,10 +13,13 @@ import { type MainWindowCreationOptions, WindowService } from "@main/services/Wi
 import { resolveSiteProxyUrl } from "@mdcz/runtime/config";
 import { runtimeLoggerService } from "@mdcz/runtime/shared";
 import { app, BrowserWindow, dialog } from "electron";
+import sharp from "sharp";
 
 const QUIT_FORCE_EXIT_TIMEOUT_MS = 15_000;
 
 runtimeLoggerService.setFactory((name) => loggerService.getLogger(name));
+// libvips keeps cached WebP inputs open, and Windows refuses to rename or delete an open file, failing publication.
+sharp.cache({ files: 0 });
 
 const signalService = new SignalService();
 const sharedNetworkClient = createAppNetworkClient({

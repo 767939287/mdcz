@@ -16,6 +16,7 @@ import {
 } from "@mdcz/shared/serverDtos";
 import { type CreateFastifyContextOptions, fastifyTRPCPlugin } from "@trpc/server/adapters/fastify";
 import Fastify, { type FastifyInstance } from "fastify";
+import sharp from "sharp";
 import { createServerActorSourceProvider, serverActorImageCacheRoot } from "./actorSourceFactory";
 import { getBearerToken } from "./http/auth";
 import { applyCorsHeaders } from "./http/cors";
@@ -90,6 +91,8 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       .warn(`Configuration ${event.kind} for profile ${event.profileName}: ${event.message}`);
   });
   runtimeLoggerService.setFactory((name) => runtimeLogs.getLogger(name));
+  // libvips keeps cached WebP inputs open, and Windows refuses to rename or delete an open file, failing publication.
+  sharp.cache({ files: 0 });
   const mappingStore = options.resources?.mappingStore ?? createServerTranslationMappingStore();
   const networkClient =
     options.resources?.networkClient ??
