@@ -1,48 +1,46 @@
-import { glob, rename, rm } from "node:fs/promises";
-import { join, parse } from "node:path";
-import type { MediaRoot } from "@mdcz/media-store";
+import { lstat, rename, rm } from "node:fs/promises";
+import path from "node:path";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
-import { assertMoveTargetAbsent, PARKED_SOURCE_PREFIX } from "./MoveOutput";
+import { assertMoveTargetAbsent } from "./MoveOutput";
+import { type PublicationJournalStore, publicationJournal } from "./publicationJournal";
 
-const PARKED_SOURCE_NAME = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-(.+)$/;
+const exists = async (filePath: string): Promise<boolean> =>
+  await lstat(filePath).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    },
+  );
 
+/** Attaches the journal for this run and undoes what an interrupted earlier run left behind. */
 export const recoverInterruptedPublications = async (
-  roots: readonly Pick<MediaRoot, "hostPath">[],
+  store: PublicationJournalStore,
   logger: Pick<RuntimeLogger, "warn"> = runtimeLoggerService.getLogger("PublicationRecovery"),
 ): Promise<void> => {
-  for (const root of roots) {
+  publicationJournal.attach(store);
+  const reachableVolumes = new Map<string, boolean>();
+  for (const entry of store.list()) {
     try {
-      const staging: string[] = [];
-      const parked: string[] = [];
-      for await (const entry of glob(
-        ["**/.mdcz-staging-*", "**/*.mdcz-staging-*.part", `**/${PARKED_SOURCE_PREFIX}*`],
-        { cwd: root.hostPath, withFileTypes: true },
-      )) {
-        (entry.name.startsWith(PARKED_SOURCE_PREFIX) ? parked : staging).push(join(entry.parentPath, entry.name));
+      // An offline network share can stall every lookup until it times out, so each volume is probed once per start.
+      const volume = path.parse(entry.path).root;
+      let volumeReachable = reachableVolumes.get(volume);
+      if (volumeReachable === undefined) {
+        volumeReachable = await exists(volume).catch(() => false);
+        reachableVolumes.set(volume, volumeReachable);
       }
-      staging.sort((left, right) => right.length - left.length);
-      for (const candidate of staging) {
-        try {
-          await rm(candidate, { recursive: true, force: true });
-        } catch (error) {
-          logger.warn(`Failed to remove publication staging path ${candidate}: ${toErrorMessage(error)}`);
-        }
+      // An unreachable folder, such as a network or cloud mount that is offline, keeps its record for a later start.
+      if (!volumeReachable || !(await exists(path.dirname(entry.path)))) continue;
+      if (entry.restoreTo === null) {
+        await rm(entry.path, { recursive: true, force: true });
+      } else if (await exists(entry.path)) {
+        // A crash between parking and relocating a source hides the video behind a dot-prefixed name.
+        await assertMoveTargetAbsent(entry.restoreTo);
+        await rename(entry.path, entry.restoreTo);
       }
-      // A crash between parking and relocating a source hides the video behind a dot-prefixed name.
-      for (const candidate of parked) {
-        const entry = parse(candidate);
-        const originalName = entry.base.slice(PARKED_SOURCE_PREFIX.length).match(PARKED_SOURCE_NAME)?.[1];
-        if (!originalName) continue;
-        const originalPath = join(entry.dir, originalName);
-        try {
-          await assertMoveTargetAbsent(originalPath);
-          await rename(candidate, originalPath);
-        } catch (error) {
-          logger.warn(`Failed to restore parked source ${candidate} to ${originalPath}: ${toErrorMessage(error)}`);
-        }
-      }
+      store.forget(entry.path);
     } catch (error) {
-      logger.warn(`Failed to recover publications under ${root.hostPath}: ${toErrorMessage(error)}`);
+      logger.warn(`Failed to recover publication temporary path ${entry.path}: ${toErrorMessage(error)}`);
     }
   }
 };

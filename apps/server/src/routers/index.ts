@@ -40,6 +40,7 @@ import {
   mediaRootEnsurePathInputSchema,
   nfoReadInputSchema,
   nfoWriteInputSchema,
+  personSyncStartInputSchema,
   posterCropSaveInputSchema,
   rootBrowserInputSchema,
   scanCandidatesInputSchema,
@@ -234,6 +235,10 @@ export const appRouter = t.router({
     execute: protectedProcedure
       .input(toolExecuteInputSchema)
       .mutation(async ({ ctx, input }) => await ctx.services.tools.execute(input)),
+    startPersonSync: protectedProcedure
+      .input(personSyncStartInputSchema)
+      .mutation(({ ctx, input }) => ctx.services.personSync.start(input)),
+    personSyncStatus: protectedProcedure.query(({ ctx }) => ctx.services.personSync.status()),
   }),
   libraries: t.router({
     list: protectedProcedure.query(async ({ ctx }) => ({

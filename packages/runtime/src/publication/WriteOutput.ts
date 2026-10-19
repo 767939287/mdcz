@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { type RuntimeLogger, runtimeLoggerService, toErrorMessage } from "../shared";
 import { CreatedDirectories, outputFileSystem } from "./outputFileSystem";
+import { TemporaryPaths } from "./publicationJournal";
 import type { PublicationFileSystem } from "./types";
 
 export type WriteArtifact = { targetPath: string; removeSourcesAfterCommit?: readonly string[] } & (
@@ -31,7 +32,7 @@ export class WriteOutput {
     const staged: Array<{ targetPath: string; temporaryPath: string; size?: number }> = [];
     const replacements: Array<{ targetPath: string; backupPath?: string; linkedBackup?: boolean; installed: boolean }> =
       [];
-    const temporaryPaths = new Set<string>();
+    const temporaryPaths = new TemporaryPaths();
     let committed = false;
     const stagingId = randomUUID();
     const pathKey = (value: string) =>
@@ -120,7 +121,7 @@ export class WriteOutput {
         replacements.push(replacement);
         try {
           await this.fileSystem.rename(artifact.temporaryPath, artifact.targetPath);
-          temporaryPaths.delete(artifact.temporaryPath);
+          temporaryPaths.settle(artifact.temporaryPath);
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EXDEV" || artifact.size === undefined) throw error;
           const localStaging = `${artifact.targetPath}.mdcz-staging-${stagingId}.part`;
@@ -130,7 +131,7 @@ export class WriteOutput {
           if ((await this.fileSystem.stat(localStaging)).size !== artifact.size)
             throw new Error(`Staged artifact size mismatch: ${artifact.targetPath}`);
           await this.fileSystem.rename(localStaging, artifact.targetPath);
-          temporaryPaths.delete(localStaging);
+          temporaryPaths.settle(localStaging);
         }
         replacement.installed = true;
       }
@@ -170,13 +171,7 @@ export class WriteOutput {
       }
       throw error;
     } finally {
-      for (const temporaryPath of temporaryPaths) {
-        try {
-          await this.fileSystem.rm(temporaryPath, { force: true });
-        } catch (error) {
-          this.logger.warn(`Failed to remove publication temporary file ${temporaryPath}: ${toErrorMessage(error)}`);
-        }
-      }
+      await temporaryPaths.removeAll(this.fileSystem, (message) => this.logger.warn(message));
       if (!committed && !options.directories) await directories.removeEmpty((message) => this.logger.warn(message));
     }
   }

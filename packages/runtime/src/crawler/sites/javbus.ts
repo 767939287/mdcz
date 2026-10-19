@@ -8,8 +8,8 @@ import {
 import { OFFICIAL_SITE_URLS } from "@mdcz/shared/config";
 import { Website } from "@mdcz/shared/enums";
 import type { CrawlerData } from "@mdcz/shared/types";
-import type { CheerioAPI } from "cheerio";
-import type { ContentType } from "../../scrape/utils/movieClassification";
+import { type CheerioAPI, load } from "cheerio";
+import { type ContentType, classifyNumber } from "../../scrape/utils/movieClassification";
 import { BaseCrawler } from "../base/BaseCrawler";
 import { movieNumbersMatch, toDateSequenceLabel } from "../base/identity";
 import { extractText, parseDate } from "../base/parser";
@@ -80,6 +80,7 @@ export class JavbusCrawler extends BaseCrawler {
     return `${context.options.baseUrl ?? OFFICIAL_SITE_URLS[Website.JAVBUS]}/${encodeURIComponent(javbusNumber(number))}`;
   }
 
+  // A missing direct page is not a miss yet: parseSearchPage falls back to the search pages.
   protected override async fetch(url: string, context: Context): Promise<string> {
     try {
       return await super.fetch(url, context);
@@ -91,7 +92,7 @@ export class JavbusCrawler extends BaseCrawler {
       ) {
         throw error;
       }
-      return super.fetch(new URL(`/search/${encodeURIComponent(javbusNumber(context.number))}`, url).href, context);
+      return "";
     }
   }
 
@@ -108,15 +109,37 @@ export class JavbusCrawler extends BaseCrawler {
     if ($("h3").length > 0) {
       return this.reuseSearchDocument(searchUrl);
     }
-    const candidates = $("a.movie-box")
-      .toArray()
-      .map((element: CheerioInput) => $(element).attr("href"))
-      .filter((href: string | undefined): href is string => typeof href === "string" && href.length > 0);
 
-    const href = candidates.find((candidate) =>
-      movieNumbersMatch(new URL(candidate, searchUrl).pathname.split("/").filter(Boolean).at(-1) ?? "", context.number),
-    );
-    return href ? new URL(href, searchUrl).href : null;
+    // Uncensored titles are listed only by the uncensored search, so a miss in one search tries the other.
+    const number = encodeURIComponent(javbusNumber(context.number));
+    const searchPaths = [`/search/${number}`, `/uncensored/search/${number}`];
+    if (classifyNumber(context.number) === "uncensored") searchPaths.reverse();
+    for (const path of searchPaths) {
+      const pageUrl = new URL(path, searchUrl).href;
+      const html = await super.fetch(pageUrl, context).catch((error: unknown) => {
+        if (failureReasonOf(error) === "not_found") return "";
+        throw error;
+      });
+      const page = load(html);
+      const pageBlocked = javbusBlockedPageError(page.html());
+      if (pageBlocked) {
+        throw pageBlocked;
+      }
+      const href = page("a.movie-box")
+        .toArray()
+        .map((element: CheerioInput) => page(element).attr("href"))
+        .find(
+          (candidate): candidate is string =>
+            typeof candidate === "string" &&
+            candidate.length > 0 &&
+            movieNumbersMatch(
+              new URL(candidate, pageUrl).pathname.split("/").filter(Boolean).at(-1) ?? "",
+              context.number,
+            ),
+        );
+      if (href) return new URL(href, pageUrl).href;
+    }
+    return null;
   }
 
   protected async parseDetailPage(_context: Context, $: CheerioAPI, detailUrl: string): Promise<CrawlerData | null> {

@@ -154,7 +154,7 @@ export class PrimaryImageAssetDownloader implements AssetDownloader {
     const result = await service.deriveFromThumbIfNeeded({
       posterPath: assets.poster,
       targetPath: posterTargetPath,
-      thumbPath: assets.thumb,
+      resolveThumbPath: () => context.resolveCover(),
     });
 
     if (result.status !== "derived") {

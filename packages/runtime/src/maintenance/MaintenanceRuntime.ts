@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { MediaRoot } from "@mdcz/media-store";
 import { resolveRootRelativePath, toRootRelativePath } from "@mdcz/media-store";
@@ -37,6 +37,7 @@ import {
 } from "../publication/movieArtifacts";
 import { acquireOutputDirectories } from "../publication/outputMutex";
 import { toRootFileRef } from "../publication/outputRefs";
+import { createStagingDirectory, removeStagingDirectory } from "../publication/publicationJournal";
 import { WriteOutput } from "../publication/WriteOutput";
 import {
   applyScrapeNetworkPolicy,
@@ -499,7 +500,7 @@ export class MaintenanceRuntime {
       const stagingParent = members[0].layout.metadataDir;
       if (preset.dataSource === "online") {
         await mkdir(stagingParent, { recursive: true });
-        stagingDir = await mkdtemp(join(stagingParent, ".mdcz-staging-"));
+        stagingDir = await createStagingDirectory(stagingParent);
       }
 
       const preparedOutputData = stagingDir
@@ -708,7 +709,7 @@ export class MaintenanceRuntime {
     } finally {
       if (stagingDir) {
         try {
-          await rm(stagingDir, { recursive: true, force: true });
+          await removeStagingDirectory(stagingDir);
         } catch (error) {
           (this.deps.logger ?? runtimeLoggerService.getLogger("MaintenanceRuntime")).warn(
             `Failed to remove maintenance staging ${stagingDir}: ${toErrorMessage(error)}`,

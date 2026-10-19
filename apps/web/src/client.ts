@@ -259,6 +259,8 @@ export const api: ServerApiContract = {
   tools: {
     catalog: () => trpcQuery("tools.catalog"),
     execute: (input) => trpcMutation("tools.execute", input),
+    startPersonSync: (input) => trpcMutation("tools.startPersonSync", input),
+    personSyncStatus: () => trpcQuery("tools.personSyncStatus"),
   },
   scans: {
     cancelCandidates: (input) => trpcMutation("scans.cancelCandidates", input),

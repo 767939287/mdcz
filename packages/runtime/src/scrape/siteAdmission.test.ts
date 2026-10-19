@@ -99,6 +99,8 @@ describe("resolveSiteAdmission", () => {
       { site: Website.FANTIA, number: "SNOS-309", credentials: { fantiaCookie: "session=ok" }, needsCredential: true },
       { site: Website.JAVDB, number: "HEYZO-3806", credentials: { javdbCookie: "session=ok" }, needsCredential: true },
       { site: Website.JAVDB, number: "FC2-1234", credentials: { javdbCookie: "session=ok" }, needsCredential: true },
+      { site: Website.JAVDB, number: "SMBD-123", credentials: { javdbCookie: "session=ok" }, needsCredential: true },
+      { site: Website.JAVDB, number: "MKBD-S120", credentials: { javdbCookie: "session=ok" }, needsCredential: true },
       { site: Website.JAVDB, number: "SNOS-309", credentials: { javdbCookie: "session=ok" }, needsCredential: false },
     ];
     for (const { site, number, credentials, needsCredential } of cases) {

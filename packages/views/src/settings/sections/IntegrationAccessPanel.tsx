@@ -1,6 +1,6 @@
 import { toErrorMessage } from "@mdcz/shared/error";
 import type { ApiKeyDto, IntegrationStatusResponse } from "@mdcz/shared/serverDtos";
-import { Button, Input } from "@mdcz/ui";
+import { Button, copyText, Input } from "@mdcz/ui";
 import { Copy, Loader2, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useT } from "../../i18n";
@@ -180,7 +180,7 @@ function CopyLine({ value }: { value: string }) {
         variant="outline"
         size="sm"
         onClick={async () => {
-          await navigator.clipboard.writeText(value);
+          await copyText(value);
           setCopied(true);
           window.setTimeout(() => setCopied(false), 1500);
         }}

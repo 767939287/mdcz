@@ -16,6 +16,7 @@ import {
 } from "@mdcz/shared/serverDtos";
 import { type CreateFastifyContextOptions, fastifyTRPCPlugin } from "@trpc/server/adapters/fastify";
 import Fastify, { type FastifyInstance } from "fastify";
+import sharp from "sharp";
 import { createServerActorSourceProvider, serverActorImageCacheRoot } from "./actorSourceFactory";
 import { getBearerToken } from "./http/auth";
 import { applyCorsHeaders } from "./http/cors";
@@ -36,6 +37,7 @@ import { LibraryWatchService } from "./services/libraryWatchService";
 import { MaintenanceService } from "./services/maintenanceService";
 import { MediaRootService } from "./services/mediaRootService";
 import { ServerPersistenceService } from "./services/persistenceService";
+import { PersonSyncService } from "./services/personSyncService";
 import { QbittorrentService } from "./services/qbittorrentService";
 import { RuntimeActionService } from "./services/runtimeActionService";
 import { RuntimeLogService } from "./services/runtimeLogService";
@@ -89,6 +91,8 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       .warn(`Configuration ${event.kind} for profile ${event.profileName}: ${event.message}`);
   });
   runtimeLoggerService.setFactory((name) => runtimeLogs.getLogger(name));
+  // libvips keeps cached WebP inputs open, and Windows refuses to rename or delete an open file, failing publication.
+  sharp.cache({ files: 0 });
   const mappingStore = options.resources?.mappingStore ?? createServerTranslationMappingStore();
   const networkClient =
     options.resources?.networkClient ??
@@ -208,6 +212,8 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     maintenance,
     mediaRoots,
     persistence,
+    personSync:
+      options.services?.personSync ?? new PersonSyncService(config, taskEvents, { networkClient, actorSourceProvider }),
     runtimeLogs,
     runtimeActions:
       options.services?.runtimeActions ?? new RuntimeActionService(config, networkClient, crawlerProvider),
@@ -231,7 +237,6 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       new ToolsService(config, mediaRoots, scrape, persistence, {
         networkClient,
         crawlerProvider,
-        actorSourceProvider,
       }),
   };
   const fastify = Fastify({

@@ -11,6 +11,7 @@ import {
 import type { MediaLibraryDto } from "@mdcz/shared/mediaLibrary";
 import type { ServerPathSuggestResponse } from "@mdcz/shared/serverDtos";
 import type { MaintenancePresetId, MediaCandidate } from "@mdcz/shared/types";
+import { randomId } from "@mdcz/ui";
 import { changeMaintenancePreset, useMaintenanceStore } from "@mdcz/views/state/maintenanceStore";
 import { useWorkbenchSetupStore } from "@mdcz/views/state/workbenchSetupStore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -144,9 +145,9 @@ export function WorkbenchSetupAdapter({
     const requestId = ++scanRequestRef.current;
     await stopPreview();
     if (requestId !== scanRequestRef.current) return;
+    const id = randomId();
     setPreviewMode(true);
     beginScan();
-    const id = crypto.randomUUID();
     const completion = (async () => {
       const isCurrentScan = () => scanRequestRef.current === requestId;
       try {

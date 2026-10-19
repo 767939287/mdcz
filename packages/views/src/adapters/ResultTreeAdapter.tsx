@@ -5,7 +5,7 @@ import {
   buildScrapeResultGroups,
   type ScrapeResultGroup,
 } from "@mdcz/shared/viewModels/scrapeResultGrouping";
-import { ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut } from "@mdcz/ui";
+import { ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, copyText } from "@mdcz/ui";
 import { selectScrapeResults, selectScrapeStatus, useScrapeStore } from "@mdcz/views/state/scrapeStore";
 import { useUIStore } from "@mdcz/views/state/uiStore";
 import { Copy, FileText, Link2 } from "lucide-react";
@@ -50,7 +50,7 @@ function buildMenuContent(
       return;
     }
     try {
-      await navigator.clipboard.writeText(resultNumber);
+      await copyText(resultNumber);
       toast.success(t.scrape.numberCopied);
     } catch {
       toast.error(t.scrape.copyNumberFailed);
@@ -135,7 +135,7 @@ function buildMenuContent(
         <ContextMenuItem
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(resultPath);
+              await copyText(resultPath);
               toast.success(t.scrape.pathCopied);
             } catch (error) {
               toast.error(toErrorMessage(error, t.scrape.copyPathFailed));

@@ -282,6 +282,14 @@ export const downloaderTorrents = sqliteTable(
   (table) => [primaryKey({ columns: [table.sourceKey, table.hash] })],
 );
 
+// Temporary files a publication creates inside libraries, recorded before they exist so startup recovery can clean
+// up after a crash by visiting only these paths instead of walking every library (cloud mounts make walks costly).
+export const publicationTemporaryPaths = sqliteTable("publication_temporary_paths", {
+  path: text("path").primaryKey(),
+  /** Where a parked source video goes back to; null for staging that is simply removed. */
+  restoreTo: text("restore_to"),
+});
+
 export const schema = {
   mediaRoots,
   mediaLibraries,
@@ -299,6 +307,7 @@ export const schema = {
   authSessions,
   downloaderSources,
   downloaderTorrents,
+  publicationTemporaryPaths,
 };
 
 export type MediaRootRow = typeof mediaRoots.$inferSelect;

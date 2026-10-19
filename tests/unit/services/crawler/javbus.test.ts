@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { FixtureNetworkClient, withGateway } from "./fixtures";
 
 describe("JavbusCrawler", () => {
-  it("requests details first and searches only on not_found, matching exact number variants", async () => {
+  it("requests details first, then searches censored and uncensored listings, matching exact number variants", async () => {
     const cases = [
       {
         number: "ABP-123",
@@ -105,6 +105,33 @@ describe("JavbusCrawler", () => {
         },
       },
       {
+        number: "RED-123",
+        searchUrl: "https://www.javbus.com/search/RED-123",
+        detailUrl: "https://www.javbus.com/RED_123",
+        searchHtml: new SiteError("not_found", "HTTP 404"),
+        extraFixtures: [
+          [
+            "https://www.javbus.com/uncensored/search/RED-123",
+            '<html><body><a class="movie-box" href="https://www.javbus.com/RED_123"></a></body></html>',
+          ],
+        ] as [string, string][],
+        requests: [
+          "https://www.javbus.com/RED-123",
+          "https://www.javbus.com/search/RED-123",
+          "https://www.javbus.com/uncensored/search/RED-123",
+          "https://www.javbus.com/RED_123",
+        ],
+        detailHtml: `
+          <html><body>
+            <h3>RED-123 Uncensored Title</h3>
+            <p><span class="header">識別碼:</span> <span>RED-123</span></p>
+          </body></html>
+        `,
+        assert: (data: Awaited<ReturnType<JavbusCrawler["crawl"]>>) => {
+          expect(data.result).toMatchObject({ success: true, data: { number: "RED-123", title: "Uncensored Title" } });
+        },
+      },
+      {
         number: "MIRR-002",
         baseUrl: "https://javbus-mirror.example",
         searchUrl: "https://javbus-mirror.example/search/MIRR-002",
@@ -138,6 +165,8 @@ describe("JavbusCrawler", () => {
       searchHtml,
       detailHtml,
       baseUrl,
+      extraFixtures,
+      requests,
       assert,
     } of cases) {
       const directUrl = caseDirectUrl ?? `${baseUrl ?? "https://www.javbus.com"}/${number}`;
@@ -145,6 +174,7 @@ describe("JavbusCrawler", () => {
         [directUrl, new SiteError("not_found", "HTTP 404")],
         [searchUrl, searchHtml],
         [detailUrl, detailHtml],
+        ...(extraFixtures ?? []),
       ]);
       const network = new FixtureNetworkClient(fixtures);
       const crawler = new JavbusCrawler(withGateway(network));
@@ -158,7 +188,7 @@ describe("JavbusCrawler", () => {
       expect(response.result.success).toBe(true);
       assert(response as Awaited<ReturnType<JavbusCrawler["crawl"]>>);
       expect(network.requests.map((request) => request.url)).toEqual(
-        directUrl === detailUrl ? [directUrl] : [directUrl, searchUrl, detailUrl],
+        requests ?? (directUrl === detailUrl ? [directUrl] : [directUrl, searchUrl, detailUrl]),
       );
     }
   });

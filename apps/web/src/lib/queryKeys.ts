@@ -30,6 +30,7 @@ export const queryKeys = {
   integrations: {
     status: ["integrations", "status"] as const,
   },
+  personSync: ["person-sync"] as const,
   pending: {
     all: ["pending"] as const,
     detail: (id: string) => ["pending", "detail", id] as const,

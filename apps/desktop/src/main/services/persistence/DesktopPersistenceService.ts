@@ -10,6 +10,7 @@ import {
   moveDatabaseAside,
   PendingRepository,
   type PersistenceDatabase,
+  PublicationJournalRepository,
   runMigrations,
   ScanTaskRepository,
   ScrapeRunRepository,
@@ -132,7 +133,7 @@ export class DesktopPersistenceService {
       const scrapeRuns = new ScrapeRunRepository(database);
       scrapeRuns.interruptUnfinished();
       const mediaRoots = new MediaRootRepository(database);
-      await recoverInterruptedPublications(await mediaRoots.list());
+      await recoverInterruptedPublications(new PublicationJournalRepository(database));
       this.state = {
         database,
         repositories: {

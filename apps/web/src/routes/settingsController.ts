@@ -1,3 +1,4 @@
+import { copyText } from "@mdcz/ui";
 import { getT } from "@mdcz/views/i18n";
 import {
   mergeConfigWithFlatPayload,
@@ -35,16 +36,12 @@ export const createSettingsServices = (queryClient: QueryClient): SettingsServic
   },
   openWatermarkDirectory: async () => {
     const result = await api.app.ensureWatermarkDirectory();
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(result.path);
-      return { copied: true, message: getT().web.copiedWatermarkDir, path: result.path, unsupported: true };
+    try {
+      await copyText(result.path);
+    } catch {
+      return { copied: false, message: getT().web.browserCannotOpenFolder, path: result.path, unsupported: true };
     }
-    return {
-      copied: false,
-      message: getT().web.browserCannotOpenFolder,
-      path: result.path,
-      unsupported: true,
-    };
+    return { copied: true, message: getT().web.copiedWatermarkDir, path: result.path, unsupported: true };
   },
   probeSiteConnectivity: async (site) => await api.crawler.probeSiteConnectivity({ site }),
   relaunchApp: async () => window.location.reload(),

@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DesktopPersistenceService } from "@main/services/persistence";
-import { createMediaRoot } from "@mdcz/media-store";
+import { publicationJournal } from "@mdcz/runtime/publication";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTempDirectory, type TempDirectoryHarness } from "../../../harness/tempDirectory";
 
@@ -32,23 +32,22 @@ describe("DesktopPersistenceService", () => {
     expect(service.initialized).toBe(true);
   });
 
-  it("sweeps namespaced publication staging when initialize runs", async () => {
+  it("removes the journaled publication staging an earlier run left behind when initialize runs", async () => {
     const { directory, service } = await createService();
     const mediaRoot = join(directory.path, "media");
     await mkdir(mediaRoot, { recursive: true });
 
-    const state = await service.initialize();
-    await state.repositories.mediaRoots.upsert(
-      createMediaRoot({ id: "root-1", displayName: "Media", hostPath: mediaRoot }),
-    );
+    await service.initialize();
     const stagedFile = join(mediaRoot, "movie.mp4.mdcz-staging-test.part");
     const stagedDirectory = join(mediaRoot, "nested", ".mdcz-staging-assets");
-    const unrelatedPart = join(mediaRoot, "user-download.part");
+    const unjournaledStaging = join(mediaRoot, "other.mp4.mdcz-staging-foreign.part");
+    publicationJournal.record(stagedFile);
+    publicationJournal.record(stagedDirectory);
     await mkdir(stagedDirectory, { recursive: true });
     await Promise.all([
       writeFile(stagedFile, "staged"),
       writeFile(join(stagedDirectory, "poster.jpg"), "staged"),
-      writeFile(unrelatedPart, "keep"),
+      writeFile(unjournaledStaging, "keep"),
     ]);
     await service.close();
 
@@ -58,6 +57,6 @@ describe("DesktopPersistenceService", () => {
 
     await expect(readFile(stagedFile)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(stagedDirectory)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(unrelatedPart, "utf8")).resolves.toBe("keep");
+    await expect(readFile(unjournaledStaging, "utf8")).resolves.toBe("keep");
   });
 });
