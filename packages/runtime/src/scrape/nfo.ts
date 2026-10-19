@@ -87,7 +87,9 @@ const buildActorNodes = (actors: string[], profiles: CrawlerData["actor_profiles
       return {
         name,
         type: "Actor",
-        thumb: profile?.photo_url,
+        // Jellyfin ignores a relative actor thumb and Emby stores it as a broken primary image, which also makes
+        // "missing" photo sync skip the actor; only URLs the server can fetch itself belong here.
+        thumb: profile?.photo_url && /^https?:\/\//iu.test(profile.photo_url) ? profile.photo_url : undefined,
         order: index,
         sortorder: index,
       };
