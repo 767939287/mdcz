@@ -99,14 +99,12 @@ const readPostedPayload = (networkClient: FakeNetworkClient, index = 0): Record<
   return JSON.parse(typeof body === "string" ? body : "{}");
 };
 
-const createAdminUsersQueryResponse = () => ({
-  Items: [{ Id: embyUserId, Policy: { IsAdministrator: true, EnableAllFolders: true } }],
-});
+const createAdminUsersResponse = () => [{ Id: embyUserId, Policy: { IsAdministrator: true, EnableAllFolders: true } }];
 
 interface MockGetJsonOptions {
   systemInfoPublic?: Record<string, unknown>;
   systemEndpoint?: Record<string, unknown>;
-  usersQuery?: Record<string, unknown>;
+  users?: unknown[];
   persons?: unknown[];
   filteredPersons?: unknown[];
   personDetails?: Record<string, Record<string, unknown>>;
@@ -123,14 +121,14 @@ const createMockGetJson =
       return extraResult;
     }
 
-    if (parsed.pathname === "/System/Info/Public" && options.systemInfoPublic !== undefined) {
-      return options.systemInfoPublic;
+    if (parsed.pathname === "/System/Info/Public") {
+      return options.systemInfoPublic ?? { ServerName: "Emby", Version: "4.10.1.0" };
     }
     if (parsed.pathname === "/System/Endpoint" && options.systemEndpoint !== undefined) {
       return options.systemEndpoint;
     }
-    if (parsed.pathname === "/Users/Query" && options.usersQuery !== undefined) {
-      return options.usersQuery;
+    if (parsed.pathname === "/Users" && options.users !== undefined) {
+      return options.users;
     }
     if (parsed.pathname === "/Persons") {
       const personTypes = parsed.searchParams.get("PersonTypes");
@@ -189,7 +187,7 @@ describe("Emby actor services", () => {
       createMockGetJson({
         systemInfoPublic: { ServerName: "Emby", Version: "4.9.0.41" },
         systemEndpoint: { IsLocal: true, IsInNetwork: true },
-        usersQuery: createAdminUsersQueryResponse(),
+        users: createAdminUsersResponse(),
         persons: [{ Id: "person-1", Name: "神木麗", Overview: "" }],
         metadataEditors: { "person-1": {} },
       }),
@@ -214,7 +212,7 @@ describe("Emby actor services", () => {
       createMockGetJson({
         systemInfoPublic: { ServerName: "Emby", Version: "4.9.0.41" },
         systemEndpoint: { IsLocal: true, IsInNetwork: true },
-        usersQuery: createAdminUsersQueryResponse(),
+        users: createAdminUsersResponse(),
         persons: [{ Id: "person-1", Name: "神木麗", Overview: "" }],
         metadataEditors: { "person-1": {} },
         extra: (parsed) => {
@@ -241,22 +239,30 @@ describe("Emby actor services", () => {
     ).toBe(true);
   });
 
-  it("updates actor info from the shared actor source provider", async () => {
+  it("writes the whole person back with only the synced fields replaced", async () => {
     const networkClient = new FakeNetworkClient();
     networkClient.getJson.mockImplementation(
       createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
+        users: createAdminUsersResponse(),
         persons: [{ Id: "person-1", Name: "神木麗" }],
         personDetails: {
           "person-1": {
             Id: "person-1",
             Name: "神木麗",
+            SortName: "かみき れい",
+            OriginalTitle: "Rei Kamiki",
             Overview: "",
             DateCreated: "2026-01-01T00:00:00.0000000Z",
+            Genres: [],
             ProviderIds: {},
             Type: "Person",
             LockedFields: [],
             LockData: false,
+            Tags: [],
+            TagItems: [
+              { Name: "favorite", Id: "tag-1" },
+              { Name: "mdcz:legacy", Id: "tag-2" },
+            ],
           },
         },
       }),
@@ -273,89 +279,31 @@ describe("Emby actor services", () => {
     expect(actorSourceProvider.lookup).toHaveBeenCalledWith(expect.any(Object), "神木麗");
     expect(networkClient.postText).toHaveBeenCalledTimes(1);
     expect(networkClient.postText.mock.calls[0]?.[0]).toMatch(/\/Items\/person-1$/u);
+    const payload = readPostedPayload(networkClient);
     expectStructuredActorPayload(
-      readPostedPayload(networkClient),
+      payload,
       "基本资料\n血型：A型\n身高：169cm\n三围：B95 W60 H85\n罩杯：G杯\n\n官方简介\n\n别名：神木れい / かみきれい",
+      { tags: ["favorite"] },
     );
-    expect(readPostedPayload(networkClient)).toMatchObject({
+    expect(payload).toMatchObject({
+      Id: "person-1",
+      Name: "神木麗",
+      SortName: "かみき れい",
+      OriginalTitle: "Rei Kamiki",
+      DateCreated: "2026-01-01T00:00:00.0000000Z",
+      Genres: [],
       ProviderIds: {},
       Type: "Person",
       LockedFields: [],
       LockData: false,
     });
-    expect(readPostedPayload(networkClient)).not.toHaveProperty("DateCreated");
+    expect(payload).not.toHaveProperty("TagItems");
     expect(
-      networkClient.getJson.mock.calls.filter(([url]) => new URL(url as string).pathname === "/Users/Query"),
+      networkClient.getJson.mock.calls.filter(([url]) => new URL(url as string).pathname === "/Users"),
     ).toHaveLength(1);
     expect(
-      networkClient.getJson.mock.calls.filter(([url]) => {
-        const parsed = new URL(url as string);
-        return parsed.pathname === "/Persons" && parsed.searchParams.get("PersonTypes") === ACTOR_PERSON_TYPES_QUERY;
-      }),
+      networkClient.getJson.mock.calls.filter(([url]) => new URL(url as string).pathname === "/Persons"),
     ).toHaveLength(1);
-  });
-
-  it("does not write sparse Emby detail fields back when the detail payload omits them", async () => {
-    const networkClient = new FakeNetworkClient();
-    networkClient.getJson.mockImplementation(
-      createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
-        persons: [{ Id: "person-1", Name: "神木麗" }],
-        personDetails: {
-          "person-1": {
-            Id: "person-1",
-            Name: "神木麗",
-            Overview: "",
-            Type: "Person",
-          },
-        },
-      }),
-    );
-
-    const actorSourceProvider = new FakeActorSourceProvider();
-    actorSourceProvider.lookup.mockResolvedValue(createStructuredLookupResult());
-
-    const deps = createDeps(networkClient, actorSourceProvider);
-
-    const result = await syncEmbyPersons(deps, createEmbyConfig(), "info", "all");
-
-    expect(result).toEqual({ processedCount: 1, failedCount: 0, skippedCount: 0 });
-    expect(readPostedPayload(networkClient)).not.toHaveProperty("ProviderIds");
-    expect(readPostedPayload(networkClient)).not.toHaveProperty("LockedFields");
-    expect(readPostedPayload(networkClient)).not.toHaveProperty("LockData");
-  });
-
-  it("preserves existing Emby production fields in the update payload", async () => {
-    const networkClient = new FakeNetworkClient();
-    networkClient.getJson.mockImplementation(
-      createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
-        persons: [{ Id: "person-1", Name: "神木麗" }],
-        personDetails: {
-          "person-1": {
-            Id: "person-1",
-            Name: "神木麗",
-            Overview: "",
-            PremiereDate: "1999-12-20T00:00:00.0000000Z",
-            ProductionLocations: ["埼玉県"],
-            ProductionYear: 1999,
-          },
-        },
-      }),
-    );
-
-    const actorSourceProvider = new FakeActorSourceProvider();
-    actorSourceProvider.lookup.mockResolvedValue(createStructuredLookupResult());
-
-    const deps = createDeps(networkClient, actorSourceProvider);
-
-    await syncEmbyPersons(deps, createEmbyConfig(), "info", "all");
-
-    expect(readPostedPayload(networkClient)).toMatchObject({
-      PremiereDate: "1999-12-20T00:00:00.0000000Z",
-      ProductionLocations: ["埼玉県"],
-      ProductionYear: 1999,
-    });
   });
 
   it("uploads actor photos from the shared actor source provider", async () => {
@@ -417,7 +365,7 @@ describe("Emby actor services", () => {
     const networkClient = new FakeNetworkClient();
     networkClient.getJson.mockImplementation(
       createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
+        users: createAdminUsersResponse(),
         persons: [{ Id: "person-1", Name: "神木麗", ImageTags: {} }],
         extra: (parsed) => {
           if (parsed.pathname === "/Persons" && !parsed.searchParams.get("userid")) {
@@ -463,7 +411,7 @@ describe("Emby actor services", () => {
       }),
     ).toBe(true);
     expect(
-      networkClient.getJson.mock.calls.filter(([url]) => new URL(url as string).pathname === "/Users/Query"),
+      networkClient.getJson.mock.calls.filter(([url]) => new URL(url as string).pathname === "/Users"),
     ).toHaveLength(1);
   });
 
@@ -519,74 +467,26 @@ describe("Emby actor services", () => {
     expect(networkClient.postText).toHaveBeenCalledTimes(2);
   });
 
-  it("reads only the filtered actor list before syncing actor info", async () => {
+  it.each([
+    { version: "4.5.4.0", personTypes: null, lookedUp: ["神木麗", "豆沢豆太郎"] },
+    { version: "4.8.11.0", personTypes: ACTOR_PERSON_TYPES_QUERY, lookedUp: ["神木麗"] },
+  ])("lists people through the actor filter only where Emby $version honours it", async ({
+    version,
+    personTypes,
+    lookedUp,
+  }) => {
     const networkClient = new FakeNetworkClient();
+    const detail = (Id: string, Name: string) => ({ Id, Name, Overview: "", Genres: [], ProviderIds: {}, Tags: [] });
     networkClient.getJson.mockImplementation(
       createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
-        persons: [{ Id: "person-1", Name: "神木麗" }],
-        personDetails: {
-          "person-1": {
-            Id: "person-1",
-            Name: "神木麗",
-            Overview: "",
-            Type: "Person",
-            LockedFields: [],
-            LockData: false,
-          },
-        },
-      }),
-    );
-
-    const actorSourceProvider = new FakeActorSourceProvider();
-    actorSourceProvider.lookup.mockResolvedValue(createStructuredLookupResult());
-
-    const deps = createDeps(networkClient, actorSourceProvider);
-
-    const result = await syncEmbyPersons(deps, createEmbyConfig(), "info", "all");
-
-    expect(result).toEqual({ processedCount: 1, failedCount: 0, skippedCount: 0 });
-    expect(
-      networkClient.getJson.mock.calls.filter(([url]) => {
-        const parsed = new URL(url as string);
-        return parsed.pathname === "/Persons" && parsed.searchParams.get("PersonTypes") === ACTOR_PERSON_TYPES_QUERY;
-      }),
-    ).toHaveLength(1);
-    expect(
-      networkClient.getJson.mock.calls.some(([url]) => {
-        const parsed = new URL(url as string);
-        return parsed.pathname === "/Persons" && !parsed.searchParams.has("PersonTypes");
-      }),
-    ).toBe(false);
-    expect(
-      networkClient.getJson.mock.calls.some(
-        ([url]) =>
-          new URL(url as string).pathname === `/Users/${embyUserId}/Items` &&
-          new URL(url as string).searchParams.has("PersonIds"),
-      ),
-    ).toBe(false);
-  });
-
-  it("filters out directors before syncing actor info", async () => {
-    const networkClient = new FakeNetworkClient();
-    networkClient.getJson.mockImplementation(
-      createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
+        systemInfoPublic: { ServerName: "Emby", Version: version },
+        users: createAdminUsersResponse(),
         persons: [
           { Id: "actor-1", Name: "神木麗" },
           { Id: "director-1", Name: "豆沢豆太郎" },
         ],
         filteredPersons: [{ Id: "actor-1", Name: "神木麗" }],
-        personDetails: {
-          "actor-1": {
-            Id: "actor-1",
-            Name: "神木麗",
-            Overview: "",
-            Type: "Person",
-            LockedFields: [],
-            LockData: false,
-          },
-        },
+        personDetails: { "actor-1": detail("actor-1", "神木麗"), "director-1": detail("director-1", "豆沢豆太郎") },
       }),
     );
 
@@ -597,17 +497,21 @@ describe("Emby actor services", () => {
 
     const result = await syncEmbyPersons(deps, createEmbyConfig(), "info", "all");
 
-    expect(result).toEqual({ processedCount: 1, failedCount: 0, skippedCount: 0 });
-    expect(actorSourceProvider.lookup).toHaveBeenCalledTimes(1);
-    expect(actorSourceProvider.lookup).toHaveBeenCalledWith(expect.any(Object), "神木麗");
-    expect(networkClient.postText).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ processedCount: lookedUp.length, failedCount: 0, skippedCount: 0 });
+    expect(actorSourceProvider.lookup.mock.calls.map(([, query]) => query).sort()).toEqual([...lookedUp].sort());
+    expect(
+      networkClient.getJson.mock.calls
+        .map(([url]) => new URL(url as string))
+        .filter((url) => url.pathname === "/Persons")
+        .map((url) => url.searchParams.get("PersonTypes")),
+    ).toEqual([personTypes]);
   });
 
   it("treats an empty filtered actor list as no actors without fallback lookups", async () => {
     const networkClient = new FakeNetworkClient();
     networkClient.getJson.mockImplementation(
       createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
+        users: createAdminUsersResponse(),
         persons: [{ Id: "director-1", Name: "豆沢豆太郎" }],
         filteredPersons: [],
       }),
@@ -641,54 +545,5 @@ describe("Emby actor services", () => {
           new URL(url as string).searchParams.has("PersonIds"),
       ),
     ).toBe(false);
-  });
-
-  it("filters out directors before syncing actor photos", async () => {
-    const networkClient = new FakeNetworkClient();
-    networkClient.getJson.mockImplementation(
-      createMockGetJson({
-        usersQuery: createAdminUsersQueryResponse(),
-        persons: [
-          { Id: "actor-1", Name: "神木麗", ImageTags: {} },
-          { Id: "director-1", Name: "豆沢豆太郎", ImageTags: {} },
-        ],
-        filteredPersons: [{ Id: "actor-1", Name: "神木麗", ImageTags: {} }],
-      }),
-    );
-    networkClient.getContent.mockResolvedValue(new TextEncoder().encode("photo-bytes"));
-
-    const actorSourceProvider = new FakeActorSourceProvider();
-    actorSourceProvider.lookup.mockResolvedValue({
-      profile: {
-        name: "神木麗",
-        photo_url: "https://images.example.com/actor-1.jpg",
-      },
-      profileSources: {
-        photo_url: "official",
-      },
-      sourceResults: [],
-      warnings: [],
-    });
-
-    const deps = createDeps(networkClient, actorSourceProvider);
-
-    const result = await syncEmbyPersons(
-      deps,
-      createEmbyConfig({
-        personSync: {
-          personImageSources: ["official"],
-        },
-      }),
-      "photo",
-      "all",
-    );
-
-    expect(result).toEqual({ processedCount: 1, failedCount: 0, skippedCount: 0 });
-    expect(actorSourceProvider.lookup).toHaveBeenCalledTimes(1);
-    expect(actorSourceProvider.lookup).toHaveBeenCalledWith(expect.any(Object), {
-      name: "神木麗",
-      requiredField: "photo_url",
-    });
-    expect(networkClient.postText).toHaveBeenCalledTimes(1);
   });
 });

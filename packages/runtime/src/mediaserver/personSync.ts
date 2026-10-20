@@ -147,6 +147,7 @@ export const syncMediaServerPerson = async <TPerson extends MediaServerPerson>(
             ...fetched,
             Overview: undefined,
             PremiereDate: undefined,
+            EndDate: undefined,
             ProductionYear: undefined,
             ProductionLocations: [],
             ProviderIds: {},

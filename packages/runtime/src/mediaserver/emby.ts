@@ -29,9 +29,7 @@ import {
 } from "./personSync";
 import type { PlannedPersonSyncState } from "./planner";
 
-export interface EmbyPerson extends MediaServerPerson {
-  ServerId?: string;
-}
+export type EmbyPerson = MediaServerPerson;
 
 export class EmbyServiceError extends MediaServerServiceError {}
 
@@ -52,13 +50,15 @@ export const buildEmbyHeaders = (configuration: Configuration, headers: MediaSer
 
 const ACTOR_PERSON_TYPES = ["Actor", "GuestStar"] as const;
 
-type EmbyFetchPersonsOptions = {
-  limit?: number;
-  fields?: string[];
-  userId?: string;
+interface PublicSystemInfo {
+  ServerName?: string;
+  Version?: string;
+}
+
+interface EmbyPersonQuery {
+  userId: string;
   personTypes?: string[];
-  searchTerm?: string;
-};
+}
 
 const fetchAutoResolvedEmbyUserId = async (
   networkClient: RuntimeNetworkClient,
@@ -69,8 +69,8 @@ const fetchAutoResolvedEmbyUserId = async (
       networkClient,
       configuration,
       serverKey: "emby",
-      path: "/Users/Query",
-      extractUsers: (response) => (isRecord(response) && Array.isArray(response.Items) ? response.Items : []),
+      path: "/Users",
+      extractUsers: (response) => (Array.isArray(response) ? response : []),
       pickUserId: (users) => pickAutoResolvedUserId(users),
       createMissingUserContextError: () =>
         new EmbyServiceError(
@@ -91,29 +91,45 @@ const fetchAutoResolvedEmbyUserId = async (
     },
   );
 
-export const resolveEmbyUserId = async (
+const fetchEmbyPublicSystemInfo = async (
   networkClient: RuntimeNetworkClient,
   configuration: Configuration,
-  overrideUserId?: string,
-): Promise<string> => {
-  const resolvedUserId = overrideUserId?.trim() || configuration.emby.userId.trim();
-  return resolvedUserId || (await fetchAutoResolvedEmbyUserId(networkClient, configuration));
+): Promise<PublicSystemInfo> => {
+  try {
+    return await networkClient.getJson<PublicSystemInfo>(buildEmbyUrl(configuration, "/System/Info/Public"), {
+      headers: { accept: "application/json" },
+    });
+  } catch (error) {
+    throw toEmbyServiceError(error, {}, { code: "EMBY_UNREACHABLE", message: "Failed to read Emby server info" });
+  }
+};
+
+const resolveEmbyPersonQuery = async (
+  networkClient: RuntimeNetworkClient,
+  configuration: Configuration,
+): Promise<EmbyPersonQuery> => {
+  const [userId, { Version }] = await Promise.all([
+    configuration.emby.userId.trim() || fetchAutoResolvedEmbyUserId(networkClient, configuration),
+    fetchEmbyPublicSystemInfo(networkClient, configuration),
+  ]);
+  // Emby 4.5 returns nobody for any PersonTypes filter, and 4.8 is the oldest seen filtering correctly, so older
+  // servers list every person, directors included.
+  const ignoresPersonTypes = typeof Version === "string" && Version.localeCompare("4.8", "en", { numeric: true }) < 0;
+  return { userId, personTypes: ignoresPersonTypes ? undefined : [...ACTOR_PERSON_TYPES] };
 };
 
 export const fetchEmbyPersons = async (
   networkClient: RuntimeNetworkClient,
   configuration: Configuration,
-  options: EmbyFetchPersonsOptions = {},
-): Promise<EmbyPerson[]> => {
-  const userId = options.userId?.trim() || configuration.emby.userId.trim() || undefined;
-
-  return await fetchMediaServerPersons(
+  options: EmbyPersonQuery & { limit?: number; fields?: string[]; searchTerm?: string },
+): Promise<EmbyPerson[]> =>
+  await fetchMediaServerPersons(
     {
       networkClient,
       configuration,
       serverKey: "emby",
       query: {
-        userid: userId,
+        userid: options.userId,
         Limit: options.limit !== undefined ? String(options.limit) : undefined,
         Fields: options.fields?.join(","),
         PersonTypes: options.personTypes?.join(","),
@@ -130,7 +146,6 @@ export const fetchEmbyPersons = async (
         return {
           Id: item.Id,
           Name: item.Name,
-          ServerId: isString(item.ServerId) ? item.ServerId : undefined,
           Overview: toStringValue(item.Overview),
           ImageTags: isRecord(item.ImageTags) ? toStringRecord(item.ImageTags) : undefined,
         };
@@ -150,28 +165,14 @@ export const fetchEmbyPersons = async (
       },
     },
   );
-};
-
-export const fetchEmbyActorPersons = async (
-  networkClient: RuntimeNetworkClient,
-  configuration: Configuration,
-  options: Omit<EmbyFetchPersonsOptions, "personTypes"> = {},
-): Promise<EmbyPerson[]> => {
-  const userId = await resolveEmbyUserId(networkClient, configuration, options.userId);
-  return await fetchEmbyPersons(networkClient, configuration, {
-    ...options,
-    userId,
-    personTypes: [...ACTOR_PERSON_TYPES],
-  });
-};
 
 export const fetchEmbyPersonDetail = async (
   networkClient: RuntimeNetworkClient,
   configuration: Configuration,
   person: EmbyPerson,
   userId: string,
-): Promise<MediaServerItemDetail> =>
-  await fetchMediaServerUserScopedItemDetail(
+): Promise<MediaServerItemDetail> => {
+  const { TagItems: tagItems, ...detail } = await fetchMediaServerUserScopedItemDetail(
     {
       networkClient,
       configuration,
@@ -203,41 +204,11 @@ export const fetchEmbyPersonDetail = async (
       },
     },
   );
-
-export const buildEmbyPersonUpdatePayload = (
-  person: EmbyPerson,
-  detail: MediaServerItemDetail,
-  synced: PlannedPersonSyncState,
-): Record<string, unknown> => {
-  const hasOwn = (key: string): boolean => Object.hasOwn(detail, key);
-  const payload: Record<string, unknown> = {
-    Id: person.Id,
-    Name: toStringValue(detail.Name) ?? person.Name,
-    Overview: synced.overview ?? toStringValue(detail.Overview) ?? "",
-    Tags: synced.tags,
-    Taglines: synced.taglines,
+  // Emby returns tags only as TagItems, and 4.8+ would apply TagItems over Tags when the detail is written back.
+  return {
+    ...detail,
+    Tags: Array.isArray(tagItems) ? toStringArray(tagItems.map((tag) => (isRecord(tag) ? tag.Name : undefined))) : [],
   };
-
-  if (hasOwn("ProviderIds")) payload.ProviderIds = toStringRecord(detail.ProviderIds);
-  if (hasOwn("LockedFields")) payload.LockedFields = toStringArray(detail.LockedFields);
-  if (typeof detail.LockData === "boolean") payload.LockData = detail.LockData;
-
-  const serverId = toStringValue(detail.ServerId) ?? person.ServerId;
-  if (serverId) payload.ServerId = serverId;
-
-  const genres = toStringArray(detail.Genres);
-  if (genres.length > 0) payload.Genres = genres;
-
-  const type = toStringValue(detail.Type);
-  if (type) payload.Type = type;
-
-  if (synced.productionLocations && synced.productionLocations.length > 0) {
-    payload.ProductionLocations = synced.productionLocations;
-  }
-  if (synced.premiereDate) payload.PremiereDate = synced.premiereDate;
-  if (synced.productionYear !== undefined) payload.ProductionYear = synced.productionYear;
-
-  return payload;
 };
 
 export const fetchEmbyMetadataEditorInfo = async (
@@ -305,14 +276,23 @@ export const updateEmbyPersonInfo = async (
   detail: MediaServerItemDetail,
   synced: PlannedPersonSyncState,
 ): Promise<void> => {
-  const payload = buildEmbyPersonUpdatePayload(person, detail, synced);
   await updateMediaServerItem(
     {
       networkClient,
       configuration,
       serverKey: "emby",
       personId: person.Id,
-      payload,
+      // Emby clears every field an update leaves out, and 4.5 rejects one without Genres or ProviderIds, so the person
+      // goes back whole with only the synced fields replaced.
+      payload: {
+        ...detail,
+        Overview: synced.overview ?? toStringValue(detail.Overview) ?? "",
+        Tags: synced.tags,
+        Taglines: synced.taglines,
+        ...(synced.productionLocations?.length ? { ProductionLocations: synced.productionLocations } : {}),
+        ...(synced.premiereDate ? { PremiereDate: synced.premiereDate } : {}),
+        ...(synced.productionYear !== undefined ? { ProductionYear: synced.productionYear } : {}),
+      },
       toServiceError: toEmbyServiceError,
     },
     {
@@ -373,31 +353,16 @@ export const uploadEmbyPrimaryImage = async (
   );
 };
 
-interface PublicSystemInfo {
-  ServerName?: string;
-  Version?: string;
-}
-
 export const checkEmbyConnection = async (
   networkClient: RuntimeNetworkClient,
   configuration: Configuration,
-): Promise<MediaServerConnectionCheckResult> => {
-  let resolvedUserId: string | undefined;
-  const getResolvedUserId = async (): Promise<string> => {
-    if (!resolvedUserId) {
-      resolvedUserId = await resolveEmbyUserId(networkClient, configuration);
-    }
-    return resolvedUserId;
-  };
-
-  return await runMediaServerConnectionCheck({
+): Promise<MediaServerConnectionCheckResult> =>
+  await runMediaServerConnectionCheck({
     includeAdminKeyStep: true,
     unreachableCode: "EMBY_UNREACHABLE",
     authFailedCode: "EMBY_AUTH_FAILED",
     fetchPublicServerInfo: async () => {
-      const info = await networkClient.getJson<PublicSystemInfo>(buildEmbyUrl(configuration, "/System/Info/Public"), {
-        headers: { accept: "application/json" },
-      });
+      const info = await fetchEmbyPublicSystemInfo(networkClient, configuration);
       return {
         serverName: typeof info.ServerName === "string" ? info.ServerName : undefined,
         version: typeof info.Version === "string" ? info.Version : undefined,
@@ -410,34 +375,33 @@ export const checkEmbyConnection = async (
     },
     // Reads people exactly as the sync does, so a server whose actor filter comes back empty fails here, not silently in sync.
     fetchPersons: async () =>
-      await fetchEmbyActorPersons(networkClient, configuration, {
+      await fetchEmbyPersons(networkClient, configuration, {
+        ...(await resolveEmbyPersonQuery(networkClient, configuration)),
         limit: 1,
         fields: ["Overview"],
-        userId: await getResolvedUserId(),
       }),
     getPersonId: (person) => person.Id,
     verifyWritePermission: async (personId) => {
       await fetchEmbyMetadataEditorInfo(networkClient, configuration, personId);
     },
   });
-};
 
 /**
- * The user ID is resolved on first use, since a follow-up looks people up many times; a failed resolve is retried on
- * the next use instead of failing every later lookup.
+ * The person query is resolved on first use, since a follow-up looks people up many times; a failed resolve is retried
+ * on the next use instead of failing every later lookup.
  */
 export const createEmbyPersonTarget = (
   deps: MediaServerActorServiceDependencies,
   configuration: Configuration,
-  userId?: string,
+  query?: EmbyPersonQuery,
 ): MediaServerPersonTarget<EmbyPerson> => {
-  let resolvedUserId: Promise<string> | undefined;
-  const getUserId = async () => {
-    resolvedUserId ??= resolveEmbyUserId(deps.networkClient, configuration, userId).catch((error: unknown) => {
-      resolvedUserId = undefined;
+  let resolvedQuery = query && Promise.resolve(query);
+  const getQuery = async () => {
+    resolvedQuery ??= resolveEmbyPersonQuery(deps.networkClient, configuration).catch((error: unknown) => {
+      resolvedQuery = undefined;
       throw error;
     });
-    return await resolvedUserId;
+    return await resolvedQuery;
   };
   return {
     ...deps,
@@ -445,14 +409,11 @@ export const createEmbyPersonTarget = (
     configuration,
     findPerson: async (name) =>
       findPersonNamed(
-        await fetchEmbyActorPersons(deps.networkClient, configuration, {
-          searchTerm: name,
-          userId: await getUserId(),
-        }),
+        await fetchEmbyPersons(deps.networkClient, configuration, { ...(await getQuery()), searchTerm: name }),
         name,
       ),
     fetchPersonDetail: async (person) =>
-      await fetchEmbyPersonDetail(deps.networkClient, configuration, person, await getUserId()),
+      await fetchEmbyPersonDetail(deps.networkClient, configuration, person, (await getQuery()).userId),
     updatePersonInfo: async (person, detail, synced) =>
       await updateEmbyPersonInfo(deps.networkClient, configuration, person, detail, synced),
     uploadPrimaryImage: async (personId, bytes, contentType) =>
@@ -467,12 +428,12 @@ export const syncEmbyPersons = async (
   kind: PersonSyncKind,
   mode: MediaServerMode,
 ): Promise<PersonSyncResult> => {
-  const userId = await resolveEmbyUserId(deps.networkClient, configuration);
+  const query = await resolveEmbyPersonQuery(deps.networkClient, configuration);
   return await runMediaServerPersonSync(
-    createEmbyPersonTarget(deps, configuration, userId),
+    createEmbyPersonTarget(deps, configuration, query),
     kind === "info" ? { info: mode } : { photo: mode },
-    await fetchEmbyActorPersons(deps.networkClient, configuration, {
-      userId,
+    await fetchEmbyPersons(deps.networkClient, configuration, {
+      ...query,
       fields: kind === "info" ? ["Overview"] : undefined,
     }),
   );
