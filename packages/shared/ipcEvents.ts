@@ -1,11 +1,12 @@
 import { IpcChannel } from "./IpcChannel";
 import type { AppUpdateStatus } from "./ipcTypes";
 import type { MaintenanceActiveSessionSnapshot } from "./maintenanceTasks";
-import type { ScrapeRunSnapshotDto } from "./serverDtos";
+import type { ActorSyncJobDto, ScrapeRunSnapshotDto } from "./serverDtos";
 
 export type TaskSnapshotPayload =
   | { resource: "maintenance"; snapshot: MaintenanceActiveSessionSnapshot | null }
-  | { resource: "scrape"; snapshot: ScrapeRunSnapshotDto | null };
+  | { resource: "scrape"; snapshot: ScrapeRunSnapshotDto | null }
+  | { resource: "actor-sync"; snapshot: ActorSyncJobDto };
 
 export type RendererShortcutAction =
   | "start-or-stop-scrape"

@@ -323,15 +323,20 @@ export const settingsFields: Messages["settingsFields"] = {
     "translate.targetLanguage": { label: "目标语言", aliases: ["语言"] },
     "personSync.personOverviewSources": { label: "人物简介来源顺序" },
     "personSync.personImageSources": { label: "人物头像来源顺序" },
+    "personSync.syncAfterPublish": {
+      label: "刮削后同步人物",
+      description:
+        "刮削任务结束后，等待各服务器扫描新影片，再同步其中的人物。本次新增的人物会以 MDCz 的简介与头像取代服务器按名字匹配到的资料并锁定；服务器原有的人物只补全缺失的部分。仅作用于已开启入库后增量刷新目录的服务器。",
+    },
+    "personSync.bioLabelLanguage": {
+      label: "人物简介标签语言",
+      description: "MDCz 写入人物简介的标签（如身高、血型）所用的语言。",
+    },
     "jellyfin.url": { label: "Jellyfin 服务器地址" },
     "jellyfin.apiKey": { label: "Jellyfin API Key" },
     "jellyfin.userId": {
       label: "Jellyfin 用户 ID",
       description: "必须是 UUID。用于人物列表读取，留空则按服务端默认处理。",
-    },
-    "jellyfin.refreshPersonAfterSync": {
-      label: "同步后刷新人物",
-      description: "同步简介或头像后，额外请求 Jellyfin 刷新人物元数据与图片。",
     },
     "jellyfin.lockOverviewAfterSync": {
       label: "同步后锁定人物简介",
@@ -340,10 +345,6 @@ export const settingsFields: Messages["settingsFields"] = {
     "emby.url": { label: "Emby 服务器地址" },
     "emby.apiKey": { label: "Emby API Key" },
     "emby.userId": { label: "Emby 用户 ID", description: "用于人物列表读取，留空则按服务端默认处理。" },
-    "emby.refreshPersonAfterSync": {
-      label: "同步后刷新人物",
-      description: "同步简介或头像后，额外请求 Emby 刷新人物元数据与图片。",
-    },
     "emby.notifyAfterPublish": {
       label: "入库后增量刷新目录",
       description: "影片整理入库后，请求 Emby 仅刷新该影片所在目录，无需全局扫描媒体库即可即时显示。",

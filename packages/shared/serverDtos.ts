@@ -635,6 +635,26 @@ export const personSyncJobSchema = personSyncStartInputSchema.extend({
 
 export type PersonSyncJobDto = z.infer<typeof personSyncJobSchema>;
 
+/** The actor sync that follows a scrape run; counts are actors times servers. */
+export const actorSyncJobSchema = z.object({
+  runId: z.string(),
+  servers: z.array(z.enum(["emby", "jellyfin"])),
+  status: z.enum(["queued", "waiting", "syncing", "completed", "cancelled"]),
+  total: z.number().int(),
+  found: z.number().int(),
+  synced: z.number().int(),
+  failed: z.number().int(),
+  notFound: z.number().int(),
+  /** Servers on which none of the actors missing at the first check appeared before the deadline. */
+  scanMissed: z.array(z.enum(["emby", "jellyfin"])),
+});
+
+export type ActorSyncJobDto = z.infer<typeof actorSyncJobSchema>;
+
+export const actorSyncCancelInputSchema = z.object({ runId: z.string().trim().min(1) });
+
+export type ActorSyncCancelInput = z.infer<typeof actorSyncCancelInputSchema>;
+
 export const taskNotificationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("invalidate"),
@@ -642,6 +662,7 @@ export const taskNotificationSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("log"), log: logEntrySchema }),
   z.object({ kind: z.literal("person-sync"), job: personSyncJobSchema }),
+  z.object({ kind: z.literal("actor-sync"), job: actorSyncJobSchema }),
 ]);
 
 export type TaskNotificationDto = z.infer<typeof taskNotificationSchema>;
@@ -1226,6 +1247,8 @@ export const toolExecuteInputSchema = z.discriminatedUnion("toolId", [
   z.object({
     toolId: z.literal("media-library-tools"),
     server: z.enum(["emby", "jellyfin"]).default("jellyfin"),
+    /** `stopPersonNameMatching` applies to Jellyfin only; both actions answer with the connection check. */
+    action: z.enum(["check", "stopPersonNameMatching"]).default("check"),
   }),
   z.object({
     toolId: z.literal("symlink-manager"),

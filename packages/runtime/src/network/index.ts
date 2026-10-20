@@ -37,6 +37,7 @@ export interface RuntimeNetworkClient {
   getContent?(url: string, init?: RuntimeRequestInit): Promise<Uint8Array>;
   getJson<T>(url: string, init?: RuntimeRequestInit): Promise<T>;
   postText(url: string, body: string, init?: RuntimeRequestInit): Promise<string>;
+  deleteText(url: string, init?: RuntimeRequestInit): Promise<string>;
   postJson<T>(url: string, payload: unknown, init?: RuntimeRequestInit): Promise<T>;
   postJsonDetailed?<TResponse>(
     url: string,
@@ -89,6 +90,10 @@ export class FetchNetworkClient implements RuntimeNetworkClient {
 
   async postText(url: string, body: string, init: RuntimeRequestInit = {}): Promise<string> {
     return await this.fetchText(url, { ...init, body, method: "POST" });
+  }
+
+  async deleteText(url: string, init: RuntimeRequestInit = {}): Promise<string> {
+    return await this.fetchText(url, { ...init, method: "DELETE" });
   }
 
   async postJson<T>(url: string, payload: unknown, init: RuntimeRequestInit = {}): Promise<T> {
@@ -147,7 +152,7 @@ export class FetchNetworkClient implements RuntimeNetworkClient {
 
   private async fetchText(
     url: string,
-    init: RuntimeRequestInit & { body?: string; method: "GET" | "POST" },
+    init: RuntimeRequestInit & { body?: string; method: "GET" | "POST" | "DELETE" },
   ): Promise<string> {
     const response = await this.fetch(url, init);
     return await response.text();
@@ -155,7 +160,7 @@ export class FetchNetworkClient implements RuntimeNetworkClient {
 
   private async fetch(
     url: string,
-    init: RuntimeRequestInit & { body?: string; method: "GET" | "POST" | "HEAD" },
+    init: RuntimeRequestInit & { body?: string; method: "GET" | "POST" | "DELETE" | "HEAD" },
     allowNonOk = false,
   ): Promise<Response> {
     const response = await globalThis.fetch(url, {

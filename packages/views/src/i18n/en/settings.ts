@@ -23,6 +23,7 @@ export const settings = {
     noActor: "No actors",
   } as Record<NamingPreviewSampleId, string>,
   options: {
+    bioLabelLanguage: { "zh-CN": "Simplified Chinese", "en-US": "English" },
     translateEngine: {
       openai: "LLM translation",
       google: "Google Translate (free)",
@@ -347,7 +348,7 @@ export const settings = {
     interface: "Interface",
     shortcuts: "Shortcuts",
     advanced: "Advanced settings",
-    sharedPersonSources: "Shared person sources",
+    sharedPersonSources: "Shared person sync",
     sharedPersonSourcesHint:
       "Used by both Jellyfin and Emby. The person biography comes from the first source in order that meets the quality bar.",
   },

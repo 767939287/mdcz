@@ -20,6 +20,7 @@ export const settings: Messages["settings"] = {
     noActor: "演员为空",
   },
   options: {
+    bioLabelLanguage: { "zh-CN": "简体中文", "en-US": "英语" },
     translateEngine: { openai: "LLM 翻译", google: "Google 翻译（免费）", deepl: "DeepL", baidu: "百度翻译" },
     baiduService: { general: "通用文本翻译", llm: "大模型文本翻译" },
     llmReasoning: { default: "服务端默认", disabled: "关闭", low: "低", medium: "中", high: "高" },
@@ -310,7 +311,7 @@ export const settings: Messages["settings"] = {
     interface: "界面",
     shortcuts: "快捷键",
     advanced: "高级设置",
-    sharedPersonSources: "共享人物资料源",
+    sharedPersonSources: "共享人物同步",
     sharedPersonSourcesHint: "同时服务 Jellyfin 和 Emby。人物简介会按顺序选择一个质量达标的主资料源。",
   },
   profiles: {

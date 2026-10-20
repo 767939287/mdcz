@@ -221,6 +221,14 @@ export const ToolDetail = ({ toolId }: { toolId: ToolId }) => {
               if (server === "jellyfin") setJellyfinCheckResult(result);
               else setEmbyCheckResult(result);
             }}
+            onStopPersonNameMatching={async () => {
+              const response = await executeM.mutateAsync({
+                toolId,
+                server: "jellyfin",
+                action: "stopPersonNameMatching",
+              });
+              setJellyfinCheckResult(response.data as MediaServerConnectionCheckResult);
+            }}
             onInfoModeChange={(server, mode) => {
               if (server === "jellyfin") setJellyfinInfoMode(mode);
               else setEmbyInfoMode(mode);

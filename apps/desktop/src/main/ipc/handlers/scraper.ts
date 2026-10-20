@@ -5,6 +5,7 @@ import type { IpcRouterContract } from "@mdcz/shared/ipcContract";
 import { withIpcErrorHandling } from "../errorHandling";
 import { createIpcError } from "../errors";
 import {
+  scraperActorSyncCancelInputSchema,
   scraperGetStatusInputSchema,
   scraperRerunDirectoryInputSchema,
   scraperRetryInputSchema,
@@ -33,6 +34,7 @@ export const createScraperHandlers = (
   | typeof IpcChannel.Scraper_Resume
   | typeof IpcChannel.Scraper_RerunDirectory
   | typeof IpcChannel.Scraper_Retry
+  | typeof IpcChannel.Scraper_CancelActorSync
 > => {
   const { scraperService } = context;
 
@@ -79,6 +81,12 @@ export const createScraperHandlers = (
         mapError: toScraperServiceIpcError,
       }),
     ),
+    [IpcChannel.Scraper_CancelActorSync]: t.procedure
+      .input(scraperActorSyncCancelInputSchema)
+      .action(async ({ input }) => {
+        scraperService.cancelActorSync(input.runId);
+        return { runId: input.runId };
+      }),
     [IpcChannel.Scraper_Retry]: t.procedure.input(scraperRetryInputSchema).action(({ input }) =>
       withIpcErrorHandling("retry files", async () => await scraperService.retry(input.runId, input.itemIds), {
         mapError: toScraperServiceIpcError,

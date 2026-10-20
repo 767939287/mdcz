@@ -1,4 +1,5 @@
 import type { MediaLibraryService, PendingService } from "@mdcz/runtime/library";
+import type { ActorSyncFollowUp } from "@mdcz/runtime/mediaserver";
 import type { ActivityService } from "./services/activityService";
 import type { AuthService } from "./services/authService";
 import type { AutomationService } from "./services/automationService";
@@ -22,6 +23,7 @@ import type { TaskEventBus } from "./taskEvents";
 
 export interface ServerServices {
   activity: ActivityService;
+  actorSync: ActorSyncFollowUp;
   automation: AutomationService;
   auth: AuthService;
   browser: BrowserService;

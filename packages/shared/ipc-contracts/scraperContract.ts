@@ -1,6 +1,6 @@
 import { IpcChannel } from "../IpcChannel";
 import type { IpcProcedure } from "../ipcTypes";
-import type { ScrapeRunSnapshotDto, ScrapeStartInput } from "../serverDtos";
+import type { ActorSyncCancelInput, ScrapeMutationAckDto, ScrapeRunSnapshotDto, ScrapeStartInput } from "../serverDtos";
 
 export type ScraperStartInput = ScrapeStartInput;
 
@@ -21,6 +21,7 @@ export type ScraperIpcContract = {
     { runId: string },
     { taskId: string; totalFiles: number | null; snapshot: ScrapeRunSnapshotDto }
   >;
+  [IpcChannel.Scraper_CancelActorSync]: IpcProcedure<ActorSyncCancelInput, ScrapeMutationAckDto>;
   [IpcChannel.Scraper_Retry]: IpcProcedure<
     { runId: string; itemIds?: string[] },
     { taskId: string; totalFiles: number | null; snapshot: ScrapeRunSnapshotDto }

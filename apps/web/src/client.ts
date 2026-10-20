@@ -272,6 +272,8 @@ export const api: ServerApiContract = {
     start: (input) => trpcMutation("scans.start", input),
   },
   scrape: {
+    actorSyncStatus: () => trpcQuery("scrape.actorSyncStatus"),
+    cancelActorSync: (input) => trpcMutation("scrape.cancelActorSync", input),
     liveRuns: () => trpcQuery("scrape.liveRuns"),
     snapshot: (input) => trpcQuery("scrape.snapshot", input),
     removeRecord: (input) => trpcMutation("scrape.removeRecord", input),

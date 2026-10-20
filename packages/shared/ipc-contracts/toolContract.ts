@@ -36,10 +36,11 @@ export type ToolIpcContract = {
     void
   >;
   [IpcChannel.Tool_JellyfinServerCheckConnection]: IpcProcedure<void, MediaServerConnectionCheckResult>;
-  [IpcChannel.Tool_JellyfinActorPhotoSync]: IpcProcedure<{ mode?: "all" | "missing" }, PersonSyncResult>;
-  [IpcChannel.Tool_JellyfinActorInfoSync]: IpcProcedure<{ mode?: "all" | "missing" }, PersonSyncResult>;
+  [IpcChannel.Tool_JellyfinStopPersonNameMatching]: IpcProcedure<void, MediaServerConnectionCheckResult>;
+  [IpcChannel.Tool_JellyfinActorPhotoSync]: IpcProcedure<{ mode: "all" | "missing" }, PersonSyncResult>;
+  [IpcChannel.Tool_JellyfinActorInfoSync]: IpcProcedure<{ mode: "all" | "missing" }, PersonSyncResult>;
   [IpcChannel.Tool_EmbyServerCheckConnection]: IpcProcedure<void, MediaServerConnectionCheckResult>;
-  [IpcChannel.Tool_EmbyActorPhotoSync]: IpcProcedure<{ mode?: "all" | "missing" }, PersonSyncResult>;
-  [IpcChannel.Tool_EmbyActorInfoSync]: IpcProcedure<{ mode?: "all" | "missing" }, PersonSyncResult>;
+  [IpcChannel.Tool_EmbyActorPhotoSync]: IpcProcedure<{ mode: "all" | "missing" }, PersonSyncResult>;
+  [IpcChannel.Tool_EmbyActorInfoSync]: IpcProcedure<{ mode: "all" | "missing" }, PersonSyncResult>;
   [IpcChannel.Tool_ToggleDevTools]: IpcProcedure<void, { success: true }>;
 };

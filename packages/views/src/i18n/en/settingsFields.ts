@@ -421,15 +421,20 @@ const fields: Record<FieldKey, FieldText> = {
   "translate.targetLanguage": { label: "Target language", aliases: ["language", "locale"] },
   "personSync.personOverviewSources": { label: "Person overview source order" },
   "personSync.personImageSources": { label: "Person photo source order" },
+  "personSync.syncAfterPublish": {
+    label: "Sync actors after scraping",
+    description:
+      "When a scrape run ends, wait for each server to scan the new movies, then sync their actors. Actors the run added get MDCz's info and photo in place of what the server matched by name, and are locked; actors the server already had only get what they miss. Applies to servers with folder refresh after organizing turned on.",
+  },
+  "personSync.bioLabelLanguage": {
+    label: "Actor bio label language",
+    description: "Language of the labels MDCz writes into actor bios, such as height and blood type.",
+  },
   "jellyfin.url": { label: "Jellyfin server URL", aliases: ["media server", "jellyfin", "server"] },
   "jellyfin.apiKey": { label: "Jellyfin API Key" },
   "jellyfin.userId": {
     label: "Jellyfin user ID",
     description: "Must be a UUID. Used to read the person list; leave empty to use the server default.",
-  },
-  "jellyfin.refreshPersonAfterSync": {
-    label: "Refresh people after sync",
-    description: "After syncing overviews or photos, also ask Jellyfin to refresh person metadata and images.",
   },
   "jellyfin.lockOverviewAfterSync": {
     label: "Lock person overview after sync",
@@ -441,10 +446,6 @@ const fields: Record<FieldKey, FieldText> = {
   "emby.userId": {
     label: "Emby user ID",
     description: "Used to read the person list; leave empty to use the server default.",
-  },
-  "emby.refreshPersonAfterSync": {
-    label: "Refresh people after sync",
-    description: "After syncing overviews or photos, also ask Emby to refresh person metadata and images.",
   },
   "emby.notifyAfterPublish": {
     label: "Refresh folder after organizing",

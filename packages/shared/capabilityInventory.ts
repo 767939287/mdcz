@@ -238,6 +238,7 @@ export const CROSS_HOST_CAPABILITIES = [
     status: "blocked",
     reason: SCRAPE_EXECUTION_REASON,
   },
+  { desktop: IpcChannel.Scraper_CancelActorSync, server: "scrape.cancelActorSync", status: "aligned" },
   {
     desktop: IpcChannel.Scraper_Retry,
     server: "scrape.retry",
@@ -346,6 +347,10 @@ export const DESKTOP_ONLY_CHANNELS = [
     channel: IpcChannel.Tool_JellyfinServerCheckConnection,
     reason: "Tool_* family is N:2 against tools.execute; deferred from 1:1 manifest.",
   },
+  {
+    channel: IpcChannel.Tool_JellyfinStopPersonNameMatching,
+    reason: "Tool_* family is N:2 against tools.execute; deferred from 1:1 manifest.",
+  },
   { channel: IpcChannel.Tool_ToggleDevTools, reason: "Electron DevTools toggle; no server procedure." },
 ] as const satisfies readonly ClassifiedChannel[];
 
@@ -395,6 +400,10 @@ export const SERVER_ONLY_PROCEDURES = [
   { path: "scrape.liveRuns", reason: "Web-only authoritative in-process scrape snapshot read." },
   { path: "scrape.result", reason: "Server persisted scrape result detail." },
   { path: "scrape.snapshot", reason: "Server scrape task snapshot API; desktop uses Scraper_GetStatus." },
+  {
+    path: "scrape.actorSyncStatus",
+    reason: "Server clients reread the follow-up after reconnecting; desktop receives it as a task snapshot event.",
+  },
   { path: "scrape.history", reason: "Server scrape history query; desktop stores in-process." },
   { path: "serverPaths.suggest", reason: "Server filesystem path suggest." },
   { path: "setup.complete", reason: "Server first-run setup." },

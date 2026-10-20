@@ -1,4 +1,4 @@
-import type { ScrapeLiveItemDto, ScrapeRunSnapshotDto } from "@mdcz/shared/serverDtos";
+import type { ActorSyncJobDto, ScrapeLiveItemDto, ScrapeRunSnapshotDto } from "@mdcz/shared/serverDtos";
 import type { ScrapeResult } from "@mdcz/shared/types";
 import { create } from "zustand";
 
@@ -12,7 +12,10 @@ interface ScrapeState {
   retiredTaskIds: string[];
   pending: boolean;
   error: string | null;
+  /** Actor syncs after runs, by run; they outlive a workbench reset because the host keeps running them. */
+  actorSyncs: Record<string, ActorSyncJobDto>;
   setSnapshot(snapshot: ScrapeRunSnapshotDto | null): void;
+  setActorSync(job: ActorSyncJobDto): void;
   setPending(pending: boolean): void;
   setError(error: string | null): void;
   reset(): void;
@@ -28,6 +31,8 @@ const initialState = () => ({
 
 export const useScrapeStore = create<ScrapeState>()((set) => ({
   ...initialState(),
+  actorSyncs: {},
+  setActorSync: (job) => set((state) => ({ actorSyncs: { ...state.actorSyncs, [job.runId]: job } })),
   setSnapshot: (snapshot) => {
     if (!snapshot) return;
     set((state) => {

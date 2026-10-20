@@ -1,5 +1,6 @@
 import type { MaintenanceActiveSessionSnapshot } from "@mdcz/shared/maintenanceTasks";
 import type { ScrapeLiveRunsResponse } from "@mdcz/shared/serverDtos";
+import { applyActorSyncJob } from "@mdcz/views/adapters";
 import { applyMaintenanceSessionSnapshot } from "@mdcz/views/state/maintenanceStore";
 import { createRefreshCoordinator } from "@mdcz/views/state/refreshCoordinator";
 import { useWorkbenchTaskStore } from "@mdcz/views/state/workbenchTaskStore";
@@ -31,10 +32,13 @@ export const useWebTaskSync = (): void => {
     let connectionOpen = false;
     let lastDispatchAt = Date.now();
     let fastPollingTimer: ReturnType<typeof setInterval> | null = null;
-    const refreshErrors: Record<"maintenance" | "scrape", string | null> = {
+    const refreshErrors: Record<"actorSync" | "maintenance" | "scrape", string | null> = {
+      actorSync: null,
       maintenance: null,
       scrape: null,
     };
+    let actorSyncPushes = 0;
+    const lastActorSyncPush = new Map<string, number>();
     const updateRefreshError = (source: keyof typeof refreshErrors, error: unknown | null): void => {
       refreshErrors[source] = error === null ? null : error instanceof Error ? error.message : String(error);
       useWorkbenchTaskStore.getState().setRefreshError(
@@ -80,6 +84,21 @@ export const useWebTaskSync = (): void => {
     const refreshPending = (): void => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.pending.all });
     };
+    // Actor sync events have no replay, so every (re)connect rereads the jobs the server still holds.
+    const refreshActorSync = (): void => {
+      const readAfterPush = actorSyncPushes;
+      void api.scrape.actorSyncStatus().then(
+        (jobs) => {
+          if (closed) return;
+          updateRefreshError("actorSync", null);
+          // A job pushed while the read was under way is newer than what the read returned.
+          for (const job of jobs) if ((lastActorSyncPush.get(job.runId) ?? 0) <= readAfterPush) applyActorSyncJob(job);
+        },
+        (error) => {
+          if (!closed) updateRefreshError("actorSync", error);
+        },
+      );
+    };
     const startFastPolling = (): void => {
       refreshLiveRuns();
       refreshMaintenanceSession();
@@ -116,11 +135,17 @@ export const useWebTaskSync = (): void => {
       },
       onNotification: (payload) => {
         recordDispatch();
+        if (payload.kind === "actor-sync") {
+          actorSyncPushes += 1;
+          lastActorSyncPush.set(payload.job.runId, actorSyncPushes);
+          applyActorSyncJob(payload.job);
+        }
         if (payload.kind !== "invalidate") return;
         if (payload.resources.includes("ready")) {
           refreshLiveRuns();
           refreshMaintenanceSession();
           refreshPending();
+          refreshActorSync();
           return;
         }
         if (payload.resources.includes("scrape-live")) refreshLiveRuns();

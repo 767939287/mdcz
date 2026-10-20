@@ -114,6 +114,7 @@ export const ipc = {
     resume: () => client[IpcChannel.Scraper_Resume](undefined),
     getStatus: (taskId?: string) => client[IpcChannel.Scraper_GetStatus]({ taskId }),
     rerunDirectory: (runId: string) => launchScrape(() => client[IpcChannel.Scraper_RerunDirectory]({ runId })),
+    cancelActorSync: (runId: string) => client[IpcChannel.Scraper_CancelActorSync]({ runId }),
     retry: (runId: string, itemIds?: readonly string[]) =>
       launchScrape(
         () => client[IpcChannel.Scraper_Retry]({ runId, ...(itemIds ? { itemIds: [...itemIds] } : {}) }),
@@ -155,6 +156,7 @@ export const ipc = {
     createSymlink: (payload: { sourceDir?: string; destDir?: string; copyFiles?: boolean }) =>
       client[IpcChannel.Tool_CreateSymlink](payload),
     checkJellyfinConnection: () => client[IpcChannel.Tool_JellyfinServerCheckConnection](undefined),
+    stopJellyfinPersonNameMatching: () => client[IpcChannel.Tool_JellyfinStopPersonNameMatching](undefined),
     syncJellyfinActorPhoto: (mode: "all" | "missing") => client[IpcChannel.Tool_JellyfinActorPhotoSync]({ mode }),
     syncJellyfinActorInfo: (mode: "all" | "missing") => client[IpcChannel.Tool_JellyfinActorInfoSync]({ mode }),
     checkEmbyConnection: () => client[IpcChannel.Tool_EmbyServerCheckConnection](undefined),

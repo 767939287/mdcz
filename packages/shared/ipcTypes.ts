@@ -67,6 +67,8 @@ export type MediaServerConnectionCheckResult = {
   steps: MediaServerCheckStep[];
   serverInfo?: ConnectionServerInfo;
   personCount?: number;
+  /** Jellyfin only: whether it fills every new person from a TMDb or OMDb search by name. */
+  matchesPeopleByName?: boolean;
 };
 
 export type PersonSyncResult = {

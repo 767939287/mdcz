@@ -1,4 +1,5 @@
 import { toErrorMessage } from "@mdcz/shared/error";
+import { applyActorSyncJob } from "@mdcz/views/adapters";
 import { createRuntimeLog, useLogStore } from "@mdcz/views/state/logStore";
 import { applyMaintenanceSessionSnapshot, useMaintenanceStore } from "@mdcz/views/state/maintenanceStore";
 import { createRefreshCoordinator } from "@mdcz/views/state/refreshCoordinator";
@@ -43,6 +44,7 @@ export const useIpcSync = (queryClient: QueryClient) => {
     const unsubscribers = [
       ipc.on.taskSnapshot((payload) => {
         if (payload.resource === "maintenance") maintenance.receive(payload.snapshot);
+        else if (payload.resource === "actor-sync") applyActorSyncJob(payload.snapshot);
         else scrape.receive(payload.snapshot);
       }),
       ipc.on.log((payload) => {

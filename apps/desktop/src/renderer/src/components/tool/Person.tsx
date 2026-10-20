@@ -38,6 +38,9 @@ export function Person() {
   const checkEmbyConnectionMut = useMutation({
     mutationFn: async () => ipc.tool.checkEmbyConnection(),
   });
+  const stopJellyfinNameMatchingMut = useMutation({
+    mutationFn: async () => ipc.tool.stopJellyfinPersonNameMatching(),
+  });
   const [selectedPersonServer, setSelectedPersonServer] = useState<PersonServer>("jellyfin");
   const [jellyfinCheckResult, setJellyfinCheckResult] = useState<MediaServerConnectionCheckResult | null>(null);
   const [embyCheckResult, setEmbyCheckResult] = useState<MediaServerConnectionCheckResult | null>(null);
@@ -57,7 +60,8 @@ export function Person() {
   const jellyfinSyncRunning = jellyfinInfoSyncRunning || jellyfinPhotoSyncRunning;
   const embySyncRunning = embyInfoSyncRunning || embyPhotoSyncRunning;
   const anyPersonSyncRunning = jellyfinSyncRunning || embySyncRunning;
-  const anyPersonCheckPending = checkJellyfinConnectionMut.isPending || checkEmbyConnectionMut.isPending;
+  const jellyfinCheckPending = checkJellyfinConnectionMut.isPending || stopJellyfinNameMatchingMut.isPending;
+  const anyPersonCheckPending = jellyfinCheckPending || checkEmbyConnectionMut.isPending;
 
   useEffect(() => {
     return () => {
@@ -258,7 +262,7 @@ export function Person() {
   };
 
   const jellyfinState: PersonServerPanelState = {
-    checkPending: checkJellyfinConnectionMut.isPending,
+    checkPending: jellyfinCheckPending,
     checkResult: jellyfinCheckResult,
     progress: jellyfinSyncProgress,
     infoMode: jellyfinActorInfoMode,
@@ -314,6 +318,15 @@ export function Person() {
         if (server === "jellyfin") void handleSyncJellyfinPhotos();
         else void handleSyncEmbyPhotos();
       }}
+      onStopPersonNameMatching={() =>
+        void stopJellyfinNameMatchingMut.mutateAsync().then(
+          (result) => {
+            setJellyfinCheckResult(result);
+            showSuccess(t.tools.personNameMatchingStopped);
+          },
+          (error) => showError(toErrorMessage(error)),
+        )
+      }
     />
   );
 }

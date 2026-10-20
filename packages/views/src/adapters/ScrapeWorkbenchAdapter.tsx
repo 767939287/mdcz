@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
 import { useT } from "../i18n";
 import { ScrapeWorkbenchFrame, type WorkbenchTaskStateContent, WorkbenchTaskStatePanel } from "../workbench";
+import { describeActorSync } from "./actorSync";
 import { DetailPanelAdapter } from "./DetailPanelAdapter";
 import type { SharedWorkbenchPorts } from "./ports";
 import { ResultTreeAdapter } from "./ResultTreeAdapter";
@@ -41,6 +42,9 @@ export function ScrapeWorkbenchAdapter({
 }: ScrapeWorkbenchAdapterProps) {
   const rerunning = useRef(false);
   const snapshot = useScrapeStore((state) => state.snapshot);
+  const actorSync = useScrapeStore((state) =>
+    state.snapshot ? (state.actorSyncs[state.snapshot.task.id] ?? null) : null,
+  );
   const t = useT();
   const { isScraping, scrapeStatus, progress, resultsCount, latestStage } = useScrapeStore(
     useShallow((state) => ({
@@ -102,6 +106,20 @@ export function ScrapeWorkbenchAdapter({
                 ? formatDuration(Date.parse(snapshot.task.completedAt) - Date.parse(snapshot.task.startedAt))
                 : null,
             )
+          : undefined
+      }
+      actorSync={
+        actorSync
+          ? {
+              text: describeActorSync(t, actorSync),
+              onCancel:
+                actorSync.status === "completed" || actorSync.status === "cancelled"
+                  ? undefined
+                  : () =>
+                      void ports.scrape
+                        .cancelActorSync(actorSync.runId)
+                        .catch((error) => toast.error(toErrorMessage(error))),
+            }
           : undefined
       }
       failedCount={failedCount}

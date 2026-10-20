@@ -22,6 +22,17 @@ export const workbench: Messages["workbench"] = {
   taskStateSkipped: "跳过",
   taskStateInaccessiblePaths: "部分路径无法访问",
   retryFailed: "重试失败",
+  actorSyncQueued: (servers: string) => `${servers} · 人物同步排队中`,
+  actorSyncWaiting: (servers: string, found: number, total: number) =>
+    `${servers} · 等待媒体库扫描（已找到 ${found}/${total}）`,
+  actorSyncSyncing: (servers: string, done: number, total: number) => `${servers} · 正在同步人物 ${done}/${total}`,
+  actorSyncSummary: (synced: number, notFound: number, failed: number) =>
+    [`人物：已同步 ${synced}`, notFound ? `未找到 ${notFound}` : "", failed ? `失败 ${failed}` : ""]
+      .filter(Boolean)
+      .join(" · "),
+  actorSyncCancelled: "人物同步已取消",
+  actorSyncScanMissed: (servers: string) => `${servers} 未能及时创建新人物。请确认它看到的影片目录路径与 MDCz 一致。`,
+  cancelActorSync: "取消",
 
   // Setup view
   browse: "浏览",

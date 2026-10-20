@@ -126,6 +126,9 @@ export const createDesktopScrapeActionPort = (): ScrapeActionPort => ({
   rerunDirectory: async (runId) => {
     await ipc.scraper.rerunDirectory(runId);
   },
+  cancelActorSync: async (runId) => {
+    await ipc.scraper.cancelActorSync(runId);
+  },
   retryFailed: async (itemIds) => {
     await retryScrapeSelection(itemIds);
   },

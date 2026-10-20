@@ -61,6 +61,10 @@ export const tools: Messages["tools"] = {
   connectionSettings: "连接设置",
   checkingConnection: "诊断中...",
   runConnectionCheck: "连接诊断",
+  personNameMatchingNotice:
+    "Jellyfin 会按名字在 TMDb 上为每个新人物搜索资料，常把 JAV 演员匹配成无关的人。MDCz 会替换刮削新增人物的这些资料，但覆盖不到它遗漏的人物。关闭搜索会作用于整个服务器：其他媒体库的人物也不再获取 TMDb 的头像与简介。",
+  stopPersonNameMatching: "关闭人物搜索",
+  personNameMatchingStopped: "Jellyfin 已不再为新人物搜索 TMDb",
   stepPassed: "通过",
   actorInfoSync: "演员资料同步",
   syncMissingOnly: "仅补全空白资料",

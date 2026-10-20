@@ -9,7 +9,7 @@ import type { ActorSourceProvider } from "@mdcz/runtime/actorSource";
 import type { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import type { CrawlerProvider } from "@mdcz/runtime/crawler";
 import type { ConfiguredMediaRootService, MediaLibraryService } from "@mdcz/runtime/library";
-import { notifyMediaServersOfPublish } from "@mdcz/runtime/mediaserver";
+import { type ActorSyncFollowUp, notifyMediaServersOfPublish } from "@mdcz/runtime/mediaserver";
 import type { NetworkClient } from "@mdcz/runtime/network";
 import { type ActorImageService, type PrepareScrapeItem, ScrapeRunner } from "@mdcz/runtime/scrape";
 import type { ScraperStartInput } from "@mdcz/shared/ipc-contracts/scraperContract";
@@ -44,6 +44,7 @@ export class ScraperService {
     private readonly persistenceService = new DesktopPersistenceService(),
     mediaRoots?: ConfiguredMediaRootService,
     private readonly prepareScrapeItem?: PrepareScrapeItem,
+    private readonly actorSync?: Pick<ActorSyncFollowUp, "collect" | "finish" | "cancel">,
   ) {
     this.mediaRoots = mediaRoots ?? createDesktopMediaRootService(this.persistenceService);
   }
@@ -60,8 +61,10 @@ export class ScraperService {
           pending: state.repositories.pending,
           mediaRoots: this.mediaRoots,
         },
-        onPublished: (directories, configuration) =>
-          void notifyMediaServersOfPublish(this.sharedNetworkClient, configuration, directories, this.logger),
+        onPublished: ({ runId, directories, actors, configuration }) => {
+          void notifyMediaServersOfPublish(this.sharedNetworkClient, configuration, directories, this.logger);
+          this.actorSync?.collect(runId, { actors, directories }, configuration);
+        },
         onPending: () => this.signalService.invalidate("pending", "overview"),
         recordSiteResults: (number, results) => state.repositories.siteResults.record(number, results),
         getConfiguration: async () => await configManager.getValidated(),
@@ -101,8 +104,11 @@ export class ScraperService {
             snapshot: live ? live.snapshot : null,
           });
         },
-        onTerminal: async (_run, snapshot) => {
+        onTerminal: async (run, snapshot) => {
           this.signalService.publishTaskSnapshot({ resource: "scrape", snapshot });
+          void this.actorSync
+            ?.finish(run.id)
+            .catch((error) => this.logger.error("Actor sync after scrape failed", error));
           this.outputLibraryScanner.invalidate();
           this.signalService.invalidate("scrape", "overview");
         },
@@ -160,6 +166,10 @@ export class ScraperService {
     const result = await runner.stop();
     this.signalService.invalidate("scrape", "overview");
     return { pendingCount: result.pendingCount };
+  }
+
+  cancelActorSync(runId: string): void {
+    this.actorSync?.cancel(runId);
   }
 
   async waitForIdle(): Promise<void> {

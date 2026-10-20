@@ -15,6 +15,7 @@ import {
 import type { HealthResponse } from "@mdcz/shared/serverDtos";
 import {
   activityListInputSchema,
+  actorSyncCancelInputSchema,
   apiKeyCreateInputSchema,
   authLoginInputSchema,
   cancelCandidatesInputSchema,
@@ -377,6 +378,11 @@ export const appRouter = t.router({
       .mutation(async ({ ctx, input }) => await ctx.services.scans.start(input.rootId)),
   }),
   scrape: t.router({
+    actorSyncStatus: protectedProcedure.query(({ ctx }) => ctx.services.actorSync.status()),
+    cancelActorSync: protectedProcedure.input(actorSyncCancelInputSchema).mutation(({ ctx, input }) => {
+      ctx.services.actorSync.cancel(input.runId);
+      return { runId: input.runId };
+    }),
     removeRecord: protectedProcedure
       .input(fileActionInputSchema)
       .mutation(async ({ ctx, input }) => await ctx.services.scrape.removeRecord(input)),

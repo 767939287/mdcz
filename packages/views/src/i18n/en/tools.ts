@@ -67,6 +67,10 @@ export const tools = {
   connectionSettings: "Connection settings",
   checkingConnection: "Checking…",
   runConnectionCheck: "Connection check",
+  personNameMatchingNotice:
+    "Jellyfin fills every new actor from a TMDb search by name, which often matches JAV actors to unrelated people. MDCz replaces this on the actors its scrapes add, but not on actors it misses. Turning the search off applies to the whole server: actors in your other libraries stop getting TMDb photos and bios too.",
+  stopPersonNameMatching: "Turn off actor search",
+  personNameMatchingStopped: "Jellyfin no longer searches TMDb for new actors",
   stepPassed: "Passed",
   actorInfoSync: "Actor metadata sync",
   syncMissingOnly: "Fill missing metadata only",

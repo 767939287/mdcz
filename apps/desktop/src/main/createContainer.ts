@@ -25,12 +25,7 @@ import { siteNetworkKey } from "@mdcz/runtime/config";
 import { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import { CrawlerProvider, FetchGateway } from "@mdcz/runtime/crawler";
 import { MediaLibraryService, PendingService } from "@mdcz/runtime/library";
-import {
-  EmbyActorInfoService,
-  EmbyActorPhotoService,
-  JellyfinActorInfoService,
-  JellyfinActorPhotoService,
-} from "@mdcz/runtime/mediaserver";
+import { ActorSyncFollowUp, PersonSyncLock } from "@mdcz/runtime/mediaserver";
 import type { NetworkClient } from "@mdcz/runtime/network";
 import { ActorImageService, type PrepareScrapeItem } from "@mdcz/runtime/scrape";
 import { AmazonJpImageService } from "@mdcz/runtime/tools";
@@ -93,6 +88,14 @@ export const createContainer = ({
     ]),
   });
 
+  const personSyncLock = new PersonSyncLock();
+  const actorSync = new ActorSyncFollowUp({
+    networkClient,
+    actorSourceProvider,
+    logger: loggerService.getLogger("ActorSync"),
+    lock: personSyncLock,
+    onChange: (job) => signalService.publishTaskSnapshot({ resource: "actor-sync", snapshot: job }),
+  });
   const scraperService = new ScraperService(
     signalService,
     networkClient,
@@ -105,6 +108,7 @@ export const createContainer = ({
     persistenceService,
     mediaRoots,
     prepareScrapeItem,
+    actorSync,
   );
   const maintenanceService = new MaintenanceService({
     signalService,
@@ -143,46 +147,8 @@ export const createContainer = ({
     crawlerProvider,
     actorSourceProvider,
     actorImageService,
-    jellyfinActorPhotoService: new JellyfinActorPhotoService({
-      signalService: {
-        showLogText: (message, level) => signalService.showLogText(message, level),
-        resetProgress: () => undefined,
-        setProgress: () => undefined,
-      },
-      networkClient,
-      actorSourceProvider,
-      logger: loggerService.getLogger("JellyfinActorPhoto"),
-    }),
-    jellyfinActorInfoService: new JellyfinActorInfoService({
-      signalService: {
-        showLogText: (message, level) => signalService.showLogText(message, level),
-        resetProgress: () => undefined,
-        setProgress: () => undefined,
-      },
-      networkClient,
-      actorSourceProvider,
-      logger: loggerService.getLogger("JellyfinActorInfo"),
-    }),
-    embyActorPhotoService: new EmbyActorPhotoService({
-      signalService: {
-        showLogText: (message, level) => signalService.showLogText(message, level),
-        resetProgress: () => undefined,
-        setProgress: () => undefined,
-      },
-      networkClient,
-      actorSourceProvider,
-      logger: loggerService.getLogger("EmbyActorPhoto"),
-    }),
-    embyActorInfoService: new EmbyActorInfoService({
-      signalService: {
-        showLogText: (message, level) => signalService.showLogText(message, level),
-        resetProgress: () => undefined,
-        setProgress: () => undefined,
-      },
-      networkClient,
-      actorSourceProvider,
-      logger: loggerService.getLogger("EmbyActorInfo"),
-    }),
+    actorSync,
+    personSyncLock,
     symlinkService: new SymlinkService({ signalService }),
     amazonPosterToolService: new AmazonPosterToolService(
       networkClient,
@@ -193,6 +159,7 @@ export const createContainer = ({
     batchTranslateToolService: new BatchTranslateToolService(networkClient, persistenceService, {}, mediaRoots),
     updateService: new UpdateService(signalService),
     shutdown: async () => {
+      actorSync.close();
       let firstError: unknown;
       for (const shutdown of [
         async () => await scraperService.shutdown(),

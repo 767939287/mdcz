@@ -40,6 +40,7 @@ export interface ScrapeActionTarget {
 
 export interface ScrapeActionPort {
   rerunDirectory(runId: string): Promise<void>;
+  cancelActorSync(runId: string): Promise<void>;
   /** Re-scrapes from one detail page (pinning it), or by number with `unpin` (dropping a pinned page). */
   rescrape(targets: ScrapeActionTarget[], source: { manualUrl: string } | { unpin: true }): Promise<void>;
   retryFailed(itemIds?: readonly string[]): Promise<void>;

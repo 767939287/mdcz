@@ -21,6 +21,18 @@ export const workbench = {
   taskStateSkipped: "Skipped",
   taskStateInaccessiblePaths: "Some paths are inaccessible",
   retryFailed: "Retry failed",
+  actorSyncQueued: (servers: string) => `${servers} · Actor sync queued`,
+  actorSyncWaiting: (servers: string, found: number, total: number) =>
+    `${servers} · Waiting for scan (${found}/${total} found)`,
+  actorSyncSyncing: (servers: string, done: number, total: number) => `${servers} · Syncing actors ${done}/${total}`,
+  actorSyncSummary: (synced: number, notFound: number, failed: number) =>
+    [`Actors: ${synced} synced`, notFound ? `${notFound} not found` : "", failed ? `${failed} failed` : ""]
+      .filter(Boolean)
+      .join(" · "),
+  actorSyncCancelled: "Actor sync cancelled",
+  actorSyncScanMissed: (servers: string) =>
+    `${servers} didn't create the new actors in time. Check that it sees the movie folders at the same paths as MDCz.`,
+  cancelActorSync: "Cancel",
 
   // Setup view
   browse: "Browse",

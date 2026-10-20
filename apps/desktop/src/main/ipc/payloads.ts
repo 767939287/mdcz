@@ -31,7 +31,10 @@ export const configImportProfileInputSchema = z.object({
   overwrite: z.boolean().optional(),
 });
 
-export { scrapeStartInputSchema as scraperStartInputSchema } from "@mdcz/shared/serverDtos";
+export {
+  actorSyncCancelInputSchema as scraperActorSyncCancelInputSchema,
+  scrapeStartInputSchema as scraperStartInputSchema,
+} from "@mdcz/shared/serverDtos";
 export const scraperStartSinglePathInputSchema = z.object({ path: z.string().trim().min(1) });
 export const scraperGetStatusInputSchema = z.object({ taskId: z.string().trim().min(1).optional() });
 export const scraperRerunDirectoryInputSchema = z.object({ runId: z.string().trim().min(1) });
@@ -116,7 +119,7 @@ export const toolBatchTranslateApplyInputSchema = z.object({
     .optional(),
   batchSize: z.number().optional(),
 });
-export const toolMediaServerModeInputSchema = z.object({ mode: z.enum(["all", "missing"]).optional() });
+export const toolMediaServerModeInputSchema = z.object({ mode: z.enum(["all", "missing"]) });
 
 export const maintenanceStartPreviewInputSchema = z.union([
   z.object({ rerunSessionId: z.string().min(1) }),

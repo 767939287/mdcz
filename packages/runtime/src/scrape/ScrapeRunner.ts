@@ -152,8 +152,13 @@ export interface ScrapeRunnerDependencies {
     /** Polled downloaders; only the server has them. */
     downloaders?: Pick<DownloaderRepository, "ownsPath">;
   };
-  /** Directories that received published movies, for media servers to scan. */
-  onPublished?: (directories: readonly string[], configuration: Configuration) => void;
+  /** One published movie: the directories for media servers to scan and the actors its NFO lists. */
+  onPublished?: (published: {
+    runId: string;
+    directories: readonly string[];
+    actors: readonly string[];
+    configuration: Configuration;
+  }) => void;
   /** Files that newly entered the pending list. */
   onPending?: (count: number) => void;
   recordSiteResults: SiteResultSink;
@@ -1074,12 +1079,15 @@ export class ScrapeRunner {
         if (uncensoredPendingAdded) this.deps.onPending?.(1);
         const publishedDirectory = (ref: RootFileRef) =>
           dirname(resolveRootRelativePath(requireRoot(ref.rootId), ref.relativePath));
-        this.deps.onPublished?.(
-          output.scrape.nfo
+        this.deps.onPublished?.({
+          runId: manifest.id,
+          directories: output.scrape.nfo
             ? [publishedDirectory(output.scrape.nfo)]
             : [...new Set(output.files.map((file) => publishedDirectory(file.target)))],
+          // Media servers create people from the NFO, so without one there is nobody to sync.
+          actors: output.scrape.nfo ? output.scrape.crawlerData.actors : [],
           configuration,
-        );
+        });
 
         return entries.map((entry) => {
           const video = output.files.find((f) => f.scrape?.itemId === entry.item.id);

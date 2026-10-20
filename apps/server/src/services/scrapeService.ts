@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ActorSourceProvider } from "@mdcz/runtime/actorSource";
 import type { CrawlerProvider } from "@mdcz/runtime/crawler";
-import { notifyMediaServersOfPublish } from "@mdcz/runtime/mediaserver";
+import { type ActorSyncFollowUp, notifyMediaServersOfPublish } from "@mdcz/runtime/mediaserver";
 import type { NetworkClient } from "@mdcz/runtime/network";
 import {
   type ActorImageService,
@@ -48,6 +48,7 @@ export interface ScrapeServiceResources {
   imageHostCooldownStore: ImageHostCooldownStore & { clear?: () => void; flush?: () => Promise<void> };
   actorImageService: ActorImageService;
   actorSourceProvider?: ActorSourceProvider;
+  actorSync?: Pick<ActorSyncFollowUp, "collect" | "finish">;
   mappingStore?: TranslationMappingStore;
   aggregationService?: Pick<AggregationService, "aggregate">;
   prepareScrapeItem?: PrepareScrapeItem;
@@ -63,6 +64,7 @@ export class ScrapeService {
   private readonly imageHostCooldownStore: ImageHostCooldownStore & { clear?: () => void; flush?: () => Promise<void> };
   private readonly actorImageService: ActorImageService;
   private readonly actorSourceProvider?: ActorSourceProvider;
+  private readonly actorSync?: ScrapeServiceResources["actorSync"];
   private readonly mappingStore?: TranslationMappingStore;
   private readonly aggregationService?: ScrapeServiceResources["aggregationService"];
   private readonly prepareScrapeItem?: PrepareScrapeItem;
@@ -85,6 +87,7 @@ export class ScrapeService {
     this.imageHostCooldownStore = resources.imageHostCooldownStore;
     this.actorImageService = resources.actorImageService;
     this.actorSourceProvider = resources.actorSourceProvider;
+    this.actorSync = resources.actorSync;
     this.mappingStore = resources.mappingStore;
     this.aggregationService = resources.aggregationService;
     this.prepareScrapeItem = resources.prepareScrapeItem;
@@ -114,13 +117,15 @@ export class ScrapeService {
           mediaRoots: this.mediaRoots,
           downloaders: state.repositories.downloaders,
         },
-        onPublished: (directories, configuration) =>
+        onPublished: ({ runId, directories, actors, configuration }) => {
           void notifyMediaServersOfPublish(
             this.networkClient,
             configuration,
             directories,
             runtimeLoggerService.getLogger("MediaServerNotify"),
-          ),
+          );
+          this.actorSync?.collect(runId, { actors, directories }, configuration);
+        },
         onPending: (count) => {
           this.onPending?.(count);
           this.taskEvents.invalidate("pending");
@@ -191,6 +196,13 @@ export class ScrapeService {
         },
         onTerminal: async (run, snapshot) => {
           this.announcedRunIds.delete(run.id);
+          void this.actorSync
+            ?.finish(run.id)
+            .catch((error) =>
+              runtimeLoggerService
+                .getLogger("ActorSync")
+                .error(`Actor sync after scrape failed: ${toErrorMessage(error)}`),
+            );
           const summary = (await this.persistence.getState()).repositories.scrapeRuns.summary(run);
           const terminalStatus = summary?.disposition ?? snapshot.task.status;
           this.addEvent(

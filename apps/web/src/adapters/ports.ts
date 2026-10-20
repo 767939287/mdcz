@@ -204,6 +204,9 @@ export const createWebScrapeActionPort = (): ScrapeActionPort => ({
     await api.scrape.rerunDirectory({ taskId });
     requestScrapeLiveRunsRefresh();
   },
+  cancelActorSync: async (runId) => {
+    await api.scrape.cancelActorSync({ runId });
+  },
   retryFailed: async (itemIds) => {
     const runId = selectScrapeTaskId(useScrapeStore.getState());
     if (!runId) throw new Error(getT().web.noScrapeTaskToRetry);

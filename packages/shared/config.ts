@@ -2,7 +2,7 @@ import { z } from "zod";
 import { normalizeActorAliasMap, normalizeActorName, toTrimmedActorName } from "./actorAliases";
 import { ACTOR_IMAGE_SOURCE_OPTIONS, ACTOR_OVERVIEW_SOURCE_OPTIONS } from "./actorSource";
 import { ASSET_NAMING_MODES } from "./assetNaming";
-import { ProxyType, ThemeMode, TRANSLATION_TARGET_OPTIONS, TranslateEngine, Website } from "./enums";
+import { ProxyType, ThemeMode, TRANSLATION_TARGET_OPTIONS, TranslateEngine, UI_LOCALES, Website } from "./enums";
 import {
   DEFAULT_LLM_BASE_URL,
   LLM_API_FORMAT_OPTIONS,
@@ -243,13 +243,19 @@ const personSyncSchema = z.object({
   personOverviewSources: z.array(z.enum(ACTOR_OVERVIEW_SOURCE_OPTIONS)).default(["official", "avjoho", "avbase"]),
   personImageSources: z.array(z.enum(ACTOR_IMAGE_SOURCE_OPTIONS)).default(["local", "gfriends", "official", "avbase"]),
   actorAliases: actorAliasesSchema,
+  /**
+   * After a scrape run, syncs the actors it published on every server that was asked to scan the published folders
+   * (`notifyAfterPublish`); other servers never create those people.
+   */
+  syncAfterPublish: z.boolean().default(false),
+  /** Language of the labels MDCz writes into actor bios, such as height and blood type. */
+  bioLabelLanguage: z.enum(UI_LOCALES).default("zh-CN"),
 });
 
 const jellyfinSchema = z.object({
   url: z.url().or(z.literal("")).default("http://127.0.0.1:8096"),
   apiKey: z.string().default(""),
   userId: z.string().default(""),
-  refreshPersonAfterSync: z.boolean().default(true),
   lockOverviewAfterSync: z.boolean().default(false),
   /** Asks the server to scan only the published directory, so new movies show up without a library refresh. */
   notifyAfterPublish: z.boolean().default(true),
@@ -259,7 +265,6 @@ const embySchema = z.object({
   url: z.url().or(z.literal("")).default(""),
   apiKey: z.string().default(""),
   userId: z.string().default(""),
-  refreshPersonAfterSync: z.boolean().default(true),
   notifyAfterPublish: z.boolean().default(true),
 });
 

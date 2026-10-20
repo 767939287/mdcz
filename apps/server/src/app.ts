@@ -5,6 +5,7 @@ import { resolveSiteProxyUrl, siteNetworkKey } from "@mdcz/runtime/config";
 import { PersistentCooldownStore } from "@mdcz/runtime/cooldown";
 import { CrawlerProvider, FetchGateway } from "@mdcz/runtime/crawler";
 import { MediaLibraryService, PendingService } from "@mdcz/runtime/library";
+import { ActorSyncFollowUp, PersonSyncLock } from "@mdcz/runtime/mediaserver";
 import { NetworkClient } from "@mdcz/runtime/network";
 import { ActorImageService, type PrepareScrapeItem } from "@mdcz/runtime/scrape";
 import { runtimeLoggerService } from "@mdcz/runtime/shared";
@@ -127,6 +128,16 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     createServerActorSourceProvider(networkClient, actorImageService, async () =>
       (await libraries.list()).flatMap((library) => [library.sourcePath, library.outputPath].filter(Boolean)),
     );
+  const personSyncLock = new PersonSyncLock();
+  const actorSync =
+    options.services?.actorSync ??
+    new ActorSyncFollowUp({
+      networkClient,
+      actorSourceProvider,
+      logger: runtimeLoggerService.getLogger("ActorSync"),
+      lock: personSyncLock,
+      onChange: (job) => taskEvents.actorSync(job),
+    });
   const scrape =
     options.services?.scrape ??
     new ScrapeService(persistence, mediaRoots, config, taskEvents, {
@@ -135,6 +146,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
       imageHostCooldownStore,
       actorImageService,
       actorSourceProvider,
+      actorSync,
       mappingStore,
       aggregationService: options.resources?.aggregationService,
       prepareScrapeItem: options.resources?.prepareScrapeItem,
@@ -202,6 +214,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     });
   const services: ServerServices = {
     activity,
+    actorSync,
     automation,
     auth: options.services?.auth ?? new AuthService(config.runtimePaths, persistence),
     browser: options.services?.browser ?? new BrowserService(mediaRoots),
@@ -213,7 +226,8 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     mediaRoots,
     persistence,
     personSync:
-      options.services?.personSync ?? new PersonSyncService(config, taskEvents, { networkClient, actorSourceProvider }),
+      options.services?.personSync ??
+      new PersonSyncService(config, taskEvents, { networkClient, actorSourceProvider, lock: personSyncLock }),
     runtimeLogs,
     runtimeActions:
       options.services?.runtimeActions ?? new RuntimeActionService(config, networkClient, crawlerProvider),
@@ -277,6 +291,7 @@ export const buildServer = (options: BuildServerOptions = {}): ServerApp => {
     if (closed) return;
     closed = true;
     services.automation.close();
+    services.actorSync.close();
     // An in-flight poll submits through library watch, so it ends first.
     const results = await Promise.allSettled([services.qbittorrent.close()]);
     results.push(...(await Promise.allSettled([services.libraryWatch.close()])));

@@ -20,6 +20,8 @@ import type {
 import type {
   ActivityListInput,
   ActivityListResponse,
+  ActorSyncCancelInput,
+  ActorSyncJobDto,
   ApiKeyCreateInput,
   ApiKeyCreateResponse,
   ApiKeyListResponse,
@@ -235,6 +237,8 @@ export interface ServerApiContract {
     start(input: ScanStartInput): Promise<ScanTaskDto>;
   };
   scrape: {
+    actorSyncStatus(): Promise<ActorSyncJobDto[]>;
+    cancelActorSync(input: ActorSyncCancelInput): Promise<ScrapeMutationAckDto>;
     liveRuns(): Promise<ScrapeLiveRunsResponse>;
     snapshot(input: ScrapeTaskControlInput): Promise<ScrapeRunSnapshotDto>;
     removeRecord(input: FileActionInput): Promise<FileActionResponse>;

@@ -20,6 +20,7 @@ export enum IpcChannel {
   Scraper_GetStatus = "scraper:get-status",
   Scraper_Retry = "scraper:retry",
   Scraper_RerunDirectory = "scraper:rerunDirectory",
+  Scraper_CancelActorSync = "scraper:cancel-actor-sync",
 
   Crawler_Test = "crawler:test",
   Crawler_ListSites = "crawler:list-sites",
@@ -84,6 +85,7 @@ export enum IpcChannel {
   Tool_JellyfinActorPhotoSync = "tool:jellyfin-actor-photo-sync",
   Tool_JellyfinActorInfoSync = "tool:jellyfin-actor-info-sync",
   Tool_JellyfinServerCheckConnection = "tool:jellyfin-server-check-connection",
+  Tool_JellyfinStopPersonNameMatching = "tool:jellyfin-stop-person-name-matching",
   Tool_EmbyActorPhotoSync = "tool:emby-actor-photo-sync",
   Tool_EmbyActorInfoSync = "tool:emby-actor-info-sync",
   Tool_EmbyServerCheckConnection = "tool:emby-server-check-connection",
