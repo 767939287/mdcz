@@ -23,6 +23,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mdcz" >> "$GITHUB_ENV"
       - name: Promote the released multi-platform manifest
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -36,4 +38,4 @@ jobs:
             echo "Leaving latest unchanged: this is not the repository's latest release."
             exit 0
           fi
-          docker buildx imagetools create --tag ghcr.io/shotheadman/mdcz:latest "ghcr.io/shotheadman/mdcz:$VERSION"
+          docker buildx imagetools create --tag "$IMAGE_NAME:latest" "$IMAGE_NAME:$VERSION"

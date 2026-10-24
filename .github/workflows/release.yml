@@ -21,6 +21,7 @@ on:
       - "docker/**"
       - ".dockerignore"
       - "compose.yaml"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -180,6 +181,11 @@ jobs:
         id: source
         run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      # GHCR requires a lowercase image name; derive the namespace from the owner running the build.
+      - name: Resolve image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mdcz" >> "$GITHUB_OUTPUT"
+
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
@@ -191,7 +197,7 @@ jobs:
             MDCZ_RELEASE_VERSION=${{ needs.version.outputs.version }}
             MDCZ_REVISION=${{ steps.source.outputs.revision }}
           tags: |
-            ghcr.io/767939287/mdcz:${{ needs.version.outputs.version }}
+            ${{ steps.image.outputs.name }}:${{ needs.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

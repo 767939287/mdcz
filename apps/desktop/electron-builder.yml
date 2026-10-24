@@ -23,7 +23,7 @@ directories:
 # Generates latest*.yml and blockmaps for electron-updater; CI uploads them via action-gh-release.
 publish:
   provider: github
-  owner: ShotHeadman
+  owner: "767939287"
   repo: mdcz
 
 files:
@@ -84,7 +84,7 @@ nsis:
 
 linux:
   category: Utility
-  maintainer: ShotHeadman <123543875+ShotHeadman@users.noreply.github.com>
+  maintainer: 767939287 <767939287@users.noreply.github.com>
   executableName: mdcz
   artifactName: ${productName}-${version}-linux-${arch}.${ext}
   target:
