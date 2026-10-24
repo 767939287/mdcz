@@ -191,7 +191,7 @@ jobs:
             MDCZ_RELEASE_VERSION=${{ needs.version.outputs.version }}
             MDCZ_REVISION=${{ steps.source.outputs.revision }}
           tags: |
-            ghcr.io/shotheadman/mdcz:${{ needs.version.outputs.version }}
+            ghcr.io/767939287/mdcz:${{ needs.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
