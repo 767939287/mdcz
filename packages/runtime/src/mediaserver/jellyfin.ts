@@ -39,7 +39,6 @@ export type JellyfinItemDetail = MediaServerItemDetail;
 export interface JellyfinPerson {
   Id: string;
   Name: string;
-  Overview?: string;
   ImageTags?: Record<string, string>;
 }
 
@@ -154,8 +153,6 @@ export const buildJellyfinPersonUpdatePayload = (
   if (serverId) payload.ServerId = serverId;
   const type = toStringValue(detail.Type);
   if (type) payload.Type = type;
-  const personType = toStringValue(detail.PersonType);
-  if (personType) payload.PersonType = personType;
   if (synced.premiereDate) payload.PremiereDate = synced.premiereDate;
   if (synced.productionYear !== undefined) payload.ProductionYear = synced.productionYear;
 
@@ -175,7 +172,6 @@ export const fetchJellyfinPersons = async (
   configuration: Configuration,
   options: {
     limit?: number;
-    fields?: string[];
     userId?: string;
   } = {},
 ): Promise<JellyfinPerson[]> => {
@@ -190,7 +186,6 @@ export const fetchJellyfinPersons = async (
         userId,
         personTypes: "Actor",
         Limit: options.limit !== undefined ? String(options.limit) : undefined,
-        Fields: options.fields?.join(","),
       },
       extractItems: (response) => {
         if (!isRecord(response) || !Array.isArray(response.Items)) {
@@ -212,7 +207,6 @@ export const fetchJellyfinPersons = async (
         return {
           Id: id,
           Name: name,
-          Overview: toStringValue(item.Overview),
           ImageTags: isRecord(item.ImageTags) ? toStringRecord(item.ImageTags) : undefined,
         };
       },
@@ -450,7 +444,6 @@ export const checkJellyfinConnection = async (
     fetchPersons: async () =>
       await fetchJellyfinPersons(networkClient, configuration, {
         limit: 1,
-        fields: ["Overview"],
       }),
     getPersonId: (person) => person.Id,
     verifyWritePermission: async (personId) => {
@@ -476,7 +469,6 @@ export class JellyfinActorInfoService {
       logger: this.deps.logger,
       fetchPersons: async () =>
         await fetchJellyfinPersons(this.networkClient, configuration, {
-          fields: ["Overview"],
           userId: resolvedUserId,
         }),
       getPersonName: (person) => person.Name,
@@ -485,8 +477,8 @@ export class JellyfinActorInfoService {
         await fetchJellyfinPersonDetail(this.networkClient, configuration, person, {
           userId: resolvedUserId,
         }),
-      buildExistingState: (person, detail) => ({
-        overview: toStringValue(detail.Overview) ?? person.Overview,
+      buildExistingState: (_person, detail) => ({
+        overview: toStringValue(detail.Overview),
         tags: toStringArray(detail.Tags),
         taglines: toStringArray(detail.Taglines),
         premiereDate: toStringValue(detail.PremiereDate),

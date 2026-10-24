@@ -58,7 +58,7 @@ const createConfig = (overrides: DeepPartial<Configuration> = {}) =>
   configurationSchema.parse(mergeConfig(defaultConfiguration, overrides));
 
 class FakeNetworkClient {
-  readonly getJson = vi.fn(async (_url: string, _init?: { headers?: HeadersInit }) => ({}));
+  readonly getJson = vi.fn(async (_url: string, _init?: { headers?: HeadersInit; timeout?: number }) => ({}));
   readonly getContent = vi.fn(async (_url: string) => new Uint8Array());
   readonly postContent = vi.fn(async (_url: string, _body: Uint8Array) => undefined);
   readonly postText = vi.fn(async (_url: string, _body: string) => "");
@@ -360,12 +360,14 @@ describe("Jellyfin services", () => {
     const requests = networkClient.getJson.mock.calls.map(([url, init]) => ({
       url: new URL(String(url)),
       authorization: new Headers(init?.headers).get("authorization"),
+      timeout: init?.timeout,
     }));
     expect(requests.map(({ url }) => url.pathname)).toEqual(
       expect.arrayContaining(["/Users", `/Users/${jellyfinUserId}/Items/person-1`]),
     );
     for (const request of requests) {
       expect(request.authorization).toBe('MediaBrowser Token="token"');
+      expect(request.timeout).toBe(120_000);
       expect([...request.url.searchParams.keys()].some((key) => key.toLowerCase().includes("key"))).toBe(false);
     }
     expect(networkClient.postText).toHaveBeenCalledTimes(1);

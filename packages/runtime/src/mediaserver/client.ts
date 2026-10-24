@@ -15,6 +15,15 @@ export interface MediaServerPersonBase {
 const getMediaServerConfig = (configuration: Configuration, serverKey: MediaServerKey) =>
   serverKey === "jellyfin" ? configuration.jellyfin : configuration.emby;
 
+/**
+ * Jellyfin de-duplicates the entire People table inside every /Persons request, which on a large library easily
+ * exceeds the scraper-oriented network budget. Media servers are self-hosted, so reads get a longer floor.
+ */
+const MEDIA_SERVER_MIN_TIMEOUT_MS = 120_000;
+
+const mediaServerTimeoutMs = (configuration: Configuration): number =>
+  Math.max(configuration.network.timeout * 1000, MEDIA_SERVER_MIN_TIMEOUT_MS);
+
 export const normalizeMediaServerBaseUrl = (value: string): string => value.trim().replace(/\/+$/u, "");
 
 export const parseMediaServerMode = (value: unknown): MediaServerMode | null =>
@@ -117,6 +126,7 @@ export const fetchMediaServerPersons = async <TPerson, TError extends MediaServe
       headers: buildMediaServerHeaders(options.configuration, options.serverKey, {
         accept: "application/json",
       }),
+      timeout: mediaServerTimeoutMs(options.configuration),
     });
 
     const persons = options.extractItems(response).flatMap((item): TPerson[] => {
@@ -146,6 +156,7 @@ export const fetchMediaServerItemDetail = async <
       headers: buildMediaServerHeaders(options.configuration, options.serverKey, {
         accept: "application/json",
       }),
+      timeout: mediaServerTimeoutMs(options.configuration),
     });
   } catch (error) {
     throw options.toServiceError(error, errorMappings.statusMappings, errorMappings.fallback);
@@ -172,6 +183,7 @@ export const fetchMediaServerResolvedUserId = async <TError extends MediaServerS
       headers: buildMediaServerHeaders(options.configuration, options.serverKey, {
         accept: "application/json",
       }),
+      timeout: mediaServerTimeoutMs(options.configuration),
     });
   } catch (error) {
     throw options.toServiceError(error, errorMappings.statusMappings, errorMappings.fallback);
@@ -228,6 +240,7 @@ export const fetchMediaServerMetadataEditorInfo = async <TError extends MediaSer
       headers: buildMediaServerHeaders(options.configuration, options.serverKey, {
         accept: "application/json",
       }),
+      timeout: mediaServerTimeoutMs(options.configuration),
     });
   } catch (error) {
     throw options.toServiceError(error, errorMappings.statusMappings, errorMappings.fallback);
@@ -243,7 +256,6 @@ export const refreshMediaServerPerson = async <TError extends MediaServerService
     options.serverKey,
     `/Items/${encodeURIComponent(options.personId)}/Refresh`,
     {
-      Recursive: "false",
       MetadataRefreshMode: "FullRefresh",
       ImageRefreshMode: "FullRefresh",
       ReplaceAllMetadata: "false",
